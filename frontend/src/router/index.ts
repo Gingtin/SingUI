@@ -3,6 +3,7 @@ import MainLayout from '@/layouts/MainLayout.vue'
 import Login from '@/views/Login.vue'
 import Dashboard from '@/views/Dashboard.vue'
 import Inbounds from '@/views/Inbounds.vue'
+import Routing from '@/views/Routing.vue'
 import Subscriptions from '@/views/Subscriptions.vue'
 import Logs from '@/views/Logs.vue'
 import Settings from '@/views/Settings.vue'
@@ -28,6 +29,11 @@ const routes: RouteRecordRaw[] = [
         path: 'inbounds',
         name: 'Inbounds',
         component: Inbounds,
+      },
+      {
+        path: 'routing',
+        name: 'Routing',
+        component: Routing,
       },
       {
         path: 'subscriptions',

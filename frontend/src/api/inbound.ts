@@ -40,9 +40,13 @@ export const createInbound = (data: Partial<Inbound>) => request.post<any, Inbou
 export const updateInbound = (id: number, data: Partial<Inbound>) => request.put<any, Inbound>(`/inbounds/${id}`, data)
 export const deleteInbound = (id: number) => request.delete<any, any>(`/inbounds/${id}`)
 
+export const batchDeleteInbounds = (ids: number[]) => request.post<any, any>('/inbounds/batch-delete', { ids })
+export const batchToggleInbounds = (ids: number[], enable: boolean) => request.post<any, any>('/inbounds/batch-toggle', { ids, enable })
+
 export const addClient = (inboundId: number, data: Partial<Client>) => request.post<any, Client>(`/inbounds/${inboundId}/clients`, data)
 export const updateClient = (inboundId: number, clientId: number, data: Partial<Client>) => request.put<any, Client>(`/inbounds/${inboundId}/clients/${clientId}`, data)
 export const deleteClient = (inboundId: number, clientId: number) => request.delete<any, any>(`/inbounds/${inboundId}/clients/${clientId}`)
+export const batchDeleteClients = (ids: number[]) => request.post<any, any>('/inbounds/batch-delete-clients', { ids })
 export const resetClientTraffic = (inboundId: number, clientId: number) => request.post<any, any>(`/inbounds/${inboundId}/clients/${clientId}/reset`)
 
 export const resetAllTraffic = () => request.post<any, any>('/inbounds/reset-all')

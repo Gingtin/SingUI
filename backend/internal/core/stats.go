@@ -148,7 +148,12 @@ func (sm *StatsManager) checkLimitsAndQuotas() {
 			configPath = "config/singbox_config.json"
 		}
 
-		cfg, err := GenerateConfig(inbounds, portSetting.Value, secretSetting.Value)
+		var rules []models.RoutingRule
+		database.DB.Order("`order` asc, id asc").Find(&rules)
+		var dns models.DNSSettings
+		database.DB.First(&dns)
+
+		cfg, err := GenerateConfig(inbounds, rules, dns, portSetting.Value, secretSetting.Value)
 		if err == nil {
 			_ = WriteConfigToFile(cfg, configPath)
 			if Instance != nil && Instance.GetStatus().IsRunning {

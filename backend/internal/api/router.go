@@ -56,6 +56,10 @@ func SetupRouter(webDistFS fs.FS) *gin.Engine {
 				inbounds.PUT("/:id", handlers.UpdateInbound)
 				inbounds.DELETE("/:id", handlers.DeleteInbound)
 
+				inbounds.POST("/batch-delete", handlers.BatchDeleteInbounds)
+				inbounds.POST("/batch-toggle", handlers.BatchToggleInbounds)
+				inbounds.POST("/batch-delete-clients", handlers.BatchDeleteClients)
+
 				inbounds.POST("/:id/clients", handlers.AddClient)
 				inbounds.PUT("/:id/clients/:clientId", handlers.UpdateClient)
 				inbounds.DELETE("/:id/clients/:clientId", handlers.DeleteClient)
@@ -64,6 +68,18 @@ func SetupRouter(webDistFS fs.FS) *gin.Engine {
 				inbounds.POST("/reset-all", handlers.ResetAllTraffic)
 				inbounds.GET("/reality-keypair", handlers.GenerateRealityKeypair)
 				inbounds.GET("/random-uuid", handlers.GenerateRandomUUID)
+			}
+
+			// Routing & DNS
+			routing := protected.Group("/routing")
+			{
+				routing.GET("/rules", handlers.ListRoutingRules)
+				routing.POST("/rules", handlers.CreateRoutingRule)
+				routing.PUT("/rules/:id", handlers.UpdateRoutingRule)
+				routing.DELETE("/rules/:id", handlers.DeleteRoutingRule)
+
+				routing.GET("/dns", handlers.GetDNSSettings)
+				routing.POST("/dns", handlers.UpdateDNSSettings)
 			}
 
 			// Settings
@@ -97,7 +113,7 @@ func SetupRouter(webDistFS fs.FS) *gin.Engine {
 			// SPA Fallback: serve index.html
 			indexFile, err := webDistFS.Open("index.html")
 			if err != nil {
-				c.String(http.StatusOK, "Sing-box UI Server is running. (Frontend dist not found)")
+				c.String(http.StatusOK, "SingUI Server is running. (Frontend dist not found)")
 				return
 			}
 			defer indexFile.Close()

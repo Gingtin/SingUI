@@ -18,13 +18,17 @@
           <template #icon><GlobalOutlined /></template>
           <span>入站节点</span>
         </a-menu-item>
+        <a-menu-item key="/routing">
+          <template #icon><ForkOutlined /></template>
+          <span>分流路由与DNS</span>
+        </a-menu-item>
         <a-menu-item key="/subscriptions">
           <template #icon><ShareAltOutlined /></template>
           <span>订阅中心</span>
         </a-menu-item>
         <a-menu-item key="/logs">
           <template #icon><CodeOutlined /></template>
-          <span>日志诊断</span>
+          <span>日志与诊断</span>
         </a-menu-item>
         <a-menu-item key="/settings">
           <template #icon><SettingOutlined /></template>
@@ -70,6 +74,7 @@ import { useRouter, useRoute } from 'vue-router'
 import {
   DashboardOutlined,
   GlobalOutlined,
+  ForkOutlined,
   ShareAltOutlined,
   CodeOutlined,
   SettingOutlined,

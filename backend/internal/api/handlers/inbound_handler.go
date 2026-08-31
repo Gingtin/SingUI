@@ -144,6 +144,54 @@ func DeleteClient(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Client deleted successfully"})
 }
 
+type BatchIdsReq struct {
+	IDs []uint `json:"ids" binding:"required"`
+}
+
+type BatchToggleReq struct {
+	IDs    []uint `json:"ids" binding:"required"`
+	Enable bool   `json:"enable"`
+}
+
+func BatchDeleteInbounds(c *gin.Context) {
+	var req BatchIdsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid IDs"})
+		return
+	}
+	if err := service.InboundSvc.BatchDeleteInbounds(req.IDs); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Inbounds deleted successfully"})
+}
+
+func BatchToggleInbounds(c *gin.Context) {
+	var req BatchToggleReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+	if err := service.InboundSvc.BatchToggleInbounds(req.IDs, req.Enable); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Inbounds updated successfully"})
+}
+
+func BatchDeleteClients(c *gin.Context) {
+	var req BatchIdsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid IDs"})
+		return
+	}
+	if err := service.InboundSvc.BatchDeleteClients(req.IDs); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Clients deleted successfully"})
+}
+
 func ResetClientTraffic(c *gin.Context) {
 	clientIdParam := c.Param("clientId")
 	clientId, err := strconv.ParseUint(clientIdParam, 10, 32)

@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/google/uuid"
 	"github.com/singbox-ui/singbox-ui/internal/core"
@@ -41,7 +42,6 @@ func (s *InboundService) CreateInbound(in *models.Inbound) error {
 		in.Tag = fmt.Sprintf("inbound-%d", in.Port)
 	}
 
-	// Prepare initial clients if empty
 	if len(in.Clients) == 0 {
 		client := models.Client{
 			Email:    "default-user",
@@ -109,6 +109,28 @@ func (s *InboundService) DeleteInbound(id uint) error {
 	return nil
 }
 
+func (s *InboundService) BatchDeleteInbounds(ids []uint) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if err := database.DB.Where("id IN ?", ids).Delete(&models.Inbound{}).Error; err != nil {
+		return err
+	}
+	_ = s.SyncCoreConfig()
+	return nil
+}
+
+func (s *InboundService) BatchToggleInbounds(ids []uint, enable bool) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if err := database.DB.Model(&models.Inbound{}).Where("id IN ?", ids).Update("enable", enable).Error; err != nil {
+		return err
+	}
+	_ = s.SyncCoreConfig()
+	return nil
+}
+
 func (s *InboundService) AddClient(inboundID uint, client *models.Client) error {
 	var in models.Inbound
 	if err := database.DB.First(&in, inboundID).Error; err != nil {
@@ -167,6 +189,17 @@ func (s *InboundService) DeleteClient(clientID uint) error {
 	return nil
 }
 
+func (s *InboundService) BatchDeleteClients(clientIDs []uint) error {
+	if len(clientIDs) == 0 {
+		return nil
+	}
+	if err := database.DB.Where("id IN ?", clientIDs).Delete(&models.Client{}).Error; err != nil {
+		return err
+	}
+	_ = s.SyncCoreConfig()
+	return nil
+}
+
 func (s *InboundService) ResetClientTraffic(clientID uint) error {
 	return database.DB.Model(&models.Client{}).Where("id = ?", clientID).Updates(map[string]interface{}{
 		"up":   0,
@@ -187,19 +220,34 @@ func (s *InboundService) SyncCoreConfig() error {
 		return err
 	}
 
-	var portSetting, secretSetting, cfgSetting models.Setting
+	var portSetting, secretSetting, cfgSetting, binSetting models.Setting
 	database.DB.Where("key = ?", "clash_api_port").First(&portSetting)
 	database.DB.Where("key = ?", "clash_api_secret").First(&secretSetting)
 	database.DB.Where("key = ?", "singbox_config_path").First(&cfgSetting)
+	database.DB.Where("key = ?", "singbox_bin_path").First(&binSetting)
 
 	cfgPath := cfgSetting.Value
 	if cfgPath == "" {
 		cfgPath = "config/singbox_config.json"
 	}
 
-	cfg, err := core.GenerateConfig(inbounds, portSetting.Value, secretSetting.Value)
+	var rules []models.RoutingRule
+	database.DB.Order("`order` asc, id asc").Find(&rules)
+
+	var dns models.DNSSettings
+	database.DB.First(&dns)
+
+	cfg, err := core.GenerateConfig(inbounds, rules, dns, portSetting.Value, secretSetting.Value)
 	if err != nil {
 		return err
+	}
+
+	// Validate config syntax with sing-box binary if available
+	binPath := binSetting.Value
+	if binPath != "" {
+		if valErr := core.ValidateConfig(binPath, cfg); valErr != nil {
+			log.Printf("[ConfigSync] Warning: Sing-box validation returned: %v\n", valErr)
+		}
 	}
 
 	if err := core.WriteConfigToFile(cfg, cfgPath); err != nil {

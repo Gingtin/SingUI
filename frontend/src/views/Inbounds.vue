@@ -1,11 +1,16 @@
 <template>
   <div class="inbounds-page">
+    <!-- Header -->
     <div class="page-header">
       <div>
         <h2>入站节点管理</h2>
-        <p class="subtitle">管理 Sing-box 代理入站节点与多用户配额</p>
+        <p class="subtitle">高品质 Sing-box 1.9+ 原生多协议节点与多用户配额调度</p>
       </div>
       <div class="header-actions">
+        <a-radio-group v-model:value="viewMode" button-style="solid">
+          <a-radio-button value="cards"><AppstoreOutlined /> 卡片视图</a-radio-button>
+          <a-radio-button value="table"><BarsOutlined /> 列表视图</a-radio-button>
+        </a-radio-group>
         <a-button @click="handleResetAllTraffic">重置全部流量</a-button>
         <a-button type="primary" @click="openCreateInboundModal">
           <template #prefix><PlusOutlined /></template>
@@ -14,12 +19,110 @@
       </div>
     </div>
 
-    <!-- Inbounds Table -->
+    <!-- Filter & Batch Toolbar -->
+    <a-card class="toolbar-card mt-3" :bordered="false">
+      <div class="toolbar-wrapper">
+        <div class="search-filters">
+          <a-input-search
+            v-model:value="searchKeyword"
+            placeholder="搜索节点名称、端口、备注..."
+            style="width: 260px;"
+            allow-clear
+          />
+          <a-select v-model:value="protocolFilter" style="width: 140px;" placeholder="全部协议">
+            <a-select-option value="all">全部协议</a-select-option>
+            <a-select-option value="vless">VLESS Reality</a-select-option>
+            <a-select-option value="hysteria2">Hysteria 2</a-select-option>
+            <a-select-option value="tuic">TUIC v5</a-select-option>
+            <a-select-option value="shadowsocks">Shadowsocks</a-select-option>
+            <a-select-option value="trojan">Trojan</a-select-option>
+            <a-select-option value="vmess">VMess</a-select-option>
+          </a-select>
+        </div>
+
+        <div v-if="selectedRowKeys.length > 0" class="batch-actions">
+          <span class="selected-text">已选中 {{ selectedRowKeys.length }} 项</span>
+          <a-button size="small" @click="handleBatchToggle(true)">批量启用</a-button>
+          <a-button size="small" @click="handleBatchToggle(false)">批量禁用</a-button>
+          <a-popconfirm title="确定批量删除选中的节点吗？" @confirm="handleBatchDelete">
+            <a-button size="small" danger>批量删除</a-button>
+          </a-popconfirm>
+        </div>
+      </div>
+    </a-card>
+
+    <!-- 1. Card View -->
+    <div v-if="viewMode === 'cards'" class="cards-container mt-4">
+      <a-row :gutter="[16, 16]">
+        <a-col v-for="inbound in filteredInbounds" :key="inbound.id" :xs="24" :sm="12" :lg="8" :xl="6">
+          <div class="node-card" :class="{ disabled: !inbound.enable }">
+            <div class="node-card-header">
+              <div class="node-title">
+                <span class="protocol-icon" :style="{ backgroundColor: getProtocolBg(inbound.protocol) }">
+                  {{ inbound.protocol.substring(0, 2).toUpperCase() }}
+                </span>
+                <div class="node-info">
+                  <span class="node-tag">{{ inbound.tag }}</span>
+                  <span class="node-remark">{{ inbound.remark || '无备注' }}</span>
+                </div>
+              </div>
+              <a-switch :checked="inbound.enable" @change="() => toggleInboundEnable(inbound)" size="small" />
+            </div>
+
+            <div class="node-card-body">
+              <div class="node-meta">
+                <div class="meta-item">
+                  <span class="label">端口</span>
+                  <span class="val port">{{ inbound.port }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="label">传输/安全</span>
+                  <span class="val">{{ inbound.network }} / {{ inbound.security }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="label">用户数</span>
+                  <span class="val">{{ inbound.clients?.length || 0 }}</span>
+                </div>
+              </div>
+
+              <div class="traffic-section">
+                <div class="traffic-labels">
+                  <span>总流量</span>
+                  <span>{{ formatBytes(calcInboundTraffic(inbound).up + calcInboundTraffic(inbound).down) }}</span>
+                </div>
+                <div class="traffic-detail">
+                  <span>⬆️ {{ formatBytes(calcInboundTraffic(inbound).up) }}</span>
+                  <span>⬇️ {{ formatBytes(calcInboundTraffic(inbound).down) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="node-card-footer">
+              <a-button type="link" size="small" @click="openClientDrawer(inbound)">
+                <UserOutlined /> 用户 ({{ inbound.clients?.length || 0 }})
+              </a-button>
+              <a-button type="link" size="small" @click="openEditInboundModal(inbound)">
+                <EditOutlined /> 编辑
+              </a-button>
+              <a-popconfirm title="确定删除该节点？" @confirm="() => handleDeleteInbound(inbound.id)">
+                <a-button type="link" size="small" danger>
+                  <DeleteOutlined />
+                </a-button>
+              </a-popconfirm>
+            </div>
+          </div>
+        </a-col>
+      </a-row>
+    </div>
+
+    <!-- 2. Table View -->
     <a-table
+      v-else
       :columns="columns"
-      :data-source="inbounds"
+      :data-source="filteredInbounds"
       :loading="loading"
       row-key="id"
+      :row-selection="{ selectedRowKeys: selectedRowKeys, onChange: onSelectChange }"
       :pagination="false"
       class="inbound-table mt-4"
     >
@@ -63,7 +166,7 @@
         <template v-if="column.key === 'actions'">
           <div class="action-buttons">
             <a-button size="small" type="link" @click="openClientDrawer(record)">
-              用户列表 ({{ record.clients?.length || 0 }})
+              用户 ({{ record.clients?.length || 0 }})
             </a-button>
             <a-button size="small" type="link" @click="openEditInboundModal(record)">
               编辑
@@ -76,11 +179,11 @@
       </template>
     </a-table>
 
-    <!-- Inbound Create/Edit Modal -->
+    <!-- Inbound Create/Edit Wizard Modal -->
     <a-modal
       v-model:open="inboundModalVisible"
       :title="isEditInbound ? '编辑入站节点' : '添加入站节点'"
-      width="680px"
+      width="720px"
       @ok="handleSaveInbound"
       :confirmLoading="modalLoading"
     >
@@ -143,7 +246,7 @@
         <!-- Reality Settings Section -->
         <div v-if="inboundForm.security === 'reality'" class="config-section">
           <div class="section-title">
-            <span>Reality 配置</span>
+            <span>Reality 伪装配置</span>
             <a-button size="small" type="link" @click="generateRealityKeys">一键生成密钥对</a-button>
           </div>
           <a-form-item label="目标伪装域名 (SNI)">
@@ -172,12 +275,12 @@
           <a-row :gutter="16">
             <a-col :span="12">
               <a-form-item label="上行速率上限 (Mbps)">
-                <a-input-number v-model:value="hyForm.up_mbps" :min="0" placeholder="0 表示不限制" style="width: 100%;" />
+                <a-input-number v-model:value="hyForm.up_mbps" :min="0" placeholder="0 为不限制" style="width: 100%;" />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item label="下行速率上限 (Mbps)">
-                <a-input-number v-model:value="hyForm.down_mbps" :min="0" placeholder="0 表示不限制" style="width: 100%;" />
+                <a-input-number v-model:value="hyForm.down_mbps" :min="0" placeholder="0 为不限制" style="width: 100%;" />
               </a-form-item>
             </a-col>
           </a-row>
@@ -208,12 +311,15 @@
     <a-drawer
       v-model:open="clientDrawerVisible"
       :title="`用户管理 - [${currentInbound?.tag}]`"
-      width="780px"
+      width="820px"
     >
       <div class="drawer-header-actions mb-4">
         <a-button type="primary" size="small" @click="openAddClientModal">
           <template #prefix><PlusOutlined /></template>
           添加用户
+        </a-button>
+        <a-button v-if="selectedClientKeys.length > 0" danger size="small" @click="handleBatchDeleteClients">
+          批量删除 ({{ selectedClientKeys.length }})
         </a-button>
       </div>
 
@@ -221,6 +327,7 @@
         :columns="clientColumns"
         :data-source="currentInbound?.clients || []"
         row-key="id"
+        :row-selection="{ selectedRowKeys: selectedClientKeys, onChange: onClientSelectChange }"
         :pagination="false"
       >
         <template #bodyCell="{ column, record }">
@@ -244,7 +351,7 @@
             <div class="action-buttons">
               <a-button size="small" type="link" @click="showClientQR(record)">二维码</a-button>
               <a-button size="small" type="link" @click="openEditClientModal(record)">编辑</a-button>
-              <a-button size="small" type="link" @click="handleResetClientTraffic(record.id)">清零流量</a-button>
+              <a-button size="small" type="link" @click="handleResetClientTraffic(record.id)">清零</a-button>
               <a-popconfirm title="确定删除该用户？" @confirm="handleDeleteClient(record.id)">
                 <a-button size="small" type="link" danger>删除</a-button>
               </a-popconfirm>
@@ -315,9 +422,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { PlusOutlined } from '@ant-design/icons-vue'
+import {
+  PlusOutlined,
+  AppstoreOutlined,
+  BarsOutlined,
+  UserOutlined,
+  EditOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons-vue'
 import QrcodeVue from 'qrcode.vue'
 import dayjs, { Dayjs } from 'dayjs'
 import {
@@ -325,9 +439,12 @@ import {
   createInbound,
   updateInbound,
   deleteInbound,
+  batchDeleteInbounds,
+  batchToggleInbounds,
   addClient,
   updateClient,
   deleteClient,
+  batchDeleteClients,
   resetClientTraffic,
   resetAllTraffic,
   getRealityKeypair,
@@ -337,9 +454,29 @@ import {
 } from '@/api/inbound'
 import { formatBytes, formatTime } from '@/utils/format'
 
+const viewMode = ref<'cards' | 'table'>('cards')
 const inbounds = ref<Inbound[]>([])
 const loading = ref(false)
 const modalLoading = ref(false)
+
+// Filters & Selection
+const searchKeyword = ref('')
+const protocolFilter = ref('all')
+const selectedRowKeys = ref<number[]>([])
+const selectedClientKeys = ref<number[]>([])
+
+const filteredInbounds = computed(() => {
+  return inbounds.value.filter((inb) => {
+    const matchProto = protocolFilter.value === 'all' || inb.protocol === protocolFilter.value
+    const kw = searchKeyword.value.toLowerCase().trim()
+    const matchKeyword =
+      !kw ||
+      inb.tag.toLowerCase().includes(kw) ||
+      (inb.remark && inb.remark.toLowerCase().includes(kw)) ||
+      String(inb.port).includes(kw)
+    return matchProto && matchKeyword
+  })
+})
 
 const columns = [
   { title: '节点名称/备注', key: 'tag' },
@@ -357,10 +494,10 @@ const clientColumns = [
   { title: '已用 / 总限额', key: 'traffic' },
   { title: '到期时间', key: 'expiry' },
   { title: '启用', key: 'enable', width: 80 },
-  { title: '操作', key: 'actions', width: 240 },
+  { title: '操作', key: 'actions', width: 220 },
 ]
 
-// Modals State
+// Inbound Modals State
 const inboundModalVisible = ref(false)
 const isEditInbound = ref(false)
 const inboundForm = reactive<Partial<Inbound>>({
@@ -427,6 +564,18 @@ async function fetchInbounds() {
   }
 }
 
+function getProtocolBg(protocol: string) {
+  const map: Record<string, string> = {
+    vless: '#3b82f6',
+    hysteria2: '#8b5cf6',
+    tuic: '#06b6d4',
+    shadowsocks: '#f59e0b',
+    trojan: '#10b981',
+    vmess: '#ef4444',
+  }
+  return map[protocol] || '#64748b'
+}
+
 function getProtocolColor(protocol: string) {
   const map: Record<string, string> = {
     vless: 'blue',
@@ -449,6 +598,38 @@ function calcInboundTraffic(inbound: Inbound) {
     }
   }
   return { up, down }
+}
+
+function onSelectChange(keys: any[]) {
+  selectedRowKeys.value = keys
+}
+
+function onClientSelectChange(keys: any[]) {
+  selectedClientKeys.value = keys
+}
+
+async function handleBatchToggle(enable: boolean) {
+  if (selectedRowKeys.value.length === 0) return
+  await batchToggleInbounds(selectedRowKeys.value, enable)
+  message.success(enable ? '已批量启用节点' : '已批量禁用节点')
+  selectedRowKeys.value = []
+  fetchInbounds()
+}
+
+async function handleBatchDelete() {
+  if (selectedRowKeys.value.length === 0) return
+  await batchDeleteInbounds(selectedRowKeys.value)
+  message.success('已批量删除节点')
+  selectedRowKeys.value = []
+  fetchInbounds()
+}
+
+async function handleBatchDeleteClients() {
+  if (selectedClientKeys.value.length === 0) return
+  await batchDeleteClients(selectedClientKeys.value)
+  message.success('已批量删除用户')
+  selectedClientKeys.value = []
+  fetchInbounds()
 }
 
 async function onProtocolChange(val: string) {
@@ -500,7 +681,6 @@ function openEditInboundModal(record: Inbound) {
   isEditInbound.value = true
   Object.assign(inboundForm, record)
 
-  // Parse stream_settings
   try {
     const stream = JSON.parse(record.stream_settings || '{}')
     if (stream.reality) {
@@ -511,7 +691,6 @@ function openEditInboundModal(record: Inbound) {
     }
   } catch {}
 
-  // Parse settings
   try {
     const settings = JSON.parse(record.settings || '{}')
     if (record.protocol === 'hysteria2') {
@@ -530,7 +709,6 @@ function openEditInboundModal(record: Inbound) {
 async function handleSaveInbound() {
   modalLoading.value = true
   try {
-    // Pack stream_settings
     const streamSettingsObj: any = {
       network: inboundForm.network,
       security: inboundForm.security,
@@ -544,7 +722,6 @@ async function handleSaveInbound() {
       }
     }
 
-    // Pack settings
     let settingsObj: any = {}
     if (inboundForm.protocol === 'hysteria2') {
       settingsObj = {
@@ -597,6 +774,7 @@ async function toggleInboundEnable(record: Inbound) {
 // Client operations
 function openClientDrawer(record: Inbound) {
   currentInbound.value = record
+  selectedClientKeys.value = []
   clientDrawerVisible.value = true
 }
 
@@ -742,9 +920,173 @@ onMounted(() => {
 
 .header-actions {
   display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar-card {
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.toolbar-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
+.search-filters {
+  display: flex;
+  gap: 12px;
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selected-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3b82f6;
+  margin-right: 4px;
+}
+
+/* Card View Styling */
+.node-card {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid #f1f5f9;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.node-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+.node-card.disabled {
+  opacity: 0.6;
+}
+
+.node-card-header {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid #f8fafc;
+}
+
+.node-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.protocol-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.node-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.node-tag {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.node-remark {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.node-card-body {
+  padding: 16px;
+  flex: 1;
+}
+
+.node-meta {
+  display: flex;
+  justify-content: space-between;
+  background: #f8fafc;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.meta-item .label {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.meta-item .val {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.meta-item .val.port {
+  font-family: monospace;
+  color: #3b82f6;
+}
+
+.traffic-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.traffic-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.traffic-detail {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.node-card-footer {
+  padding: 8px 12px;
+  background: #fcfcfd;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Table View */
 .inbound-table {
   background: #ffffff;
   border-radius: 12px;
@@ -824,8 +1166,18 @@ onMounted(() => {
   gap: 4px;
 }
 
+.drawer-header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .mt-4 {
   margin-top: 16px;
+}
+
+.mt-3 {
+  margin-top: 12px;
 }
 
 .mb-4 {

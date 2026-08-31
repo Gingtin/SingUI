@@ -12,6 +12,7 @@
             <span v-if="coreStatus.pid"><b>PID:</b> {{ coreStatus.pid }}</span>
             <span><b>运行时间:</b> {{ formatDuration(sysStatus.uptime) }}</span>
             <span><b>系统平台:</b> {{ sysStatus.platform || sysStatus.os }}</span>
+            <span v-if="coreStatus.version"><b>版本:</b> {{ coreStatus.version.split('\n')[0] }}</span>
           </div>
         </div>
         <div class="status-actions">
@@ -76,10 +77,22 @@
       </a-col>
     </a-row>
 
-    <!-- Speed Chart -->
-    <a-card class="chart-card mt-4" title="实时网络速率监控" :bordered="false">
-      <div ref="chartRef" style="height: 320px; width: 100%;"></div>
-    </a-card>
+    <!-- Charts Row -->
+    <a-row :gutter="[16, 16]" class="mt-4">
+      <!-- Speed Chart (16 cols) -->
+      <a-col :xs="24" :lg="16">
+        <a-card class="chart-card" title="实时网络速率动态监控 (KB/s)" :bordered="false">
+          <div ref="chartRef" style="height: 320px; width: 100%;"></div>
+        </a-card>
+      </a-col>
+
+      <!-- Protocol Distribution (8 cols) -->
+      <a-col :xs="24" :lg="8">
+        <a-card class="chart-card" title="入站协议分布" :bordered="false">
+          <div ref="pieChartRef" style="height: 320px; width: 100%;"></div>
+        </a-card>
+      </a-col>
+    </a-row>
   </div>
 </template>
 
@@ -88,6 +101,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import * as echarts from 'echarts'
 import { getSystemStatus, getCoreStatus, startCore, stopCore, restartCore, SystemStatus, CoreStatus } from '@/api/server'
+import { getInbounds } from '@/api/inbound'
 import { formatBytes, formatDuration } from '@/utils/format'
 
 const sysStatus = ref<Partial<SystemStatus>>({})
@@ -95,7 +109,9 @@ const coreStatus = ref<Partial<CoreStatus>>({})
 const coreLoading = ref(false)
 
 const chartRef = ref<HTMLDivElement>()
+const pieChartRef = ref<HTMLDivElement>()
 let chartInstance: echarts.ECharts | null = null
+let pieInstance: echarts.ECharts | null = null
 
 const downloadHistory: number[] = []
 const uploadHistory: number[] = []
@@ -143,6 +159,33 @@ async function fetchStatus() {
   }
 }
 
+async function fetchProtocolDistribution() {
+  try {
+    const inbounds = await getInbounds()
+    const counts: Record<string, number> = {}
+    for (const inb of inbounds) {
+      counts[inb.protocol] = (counts[inb.protocol] || 0) + 1
+    }
+
+    const pieData = Object.keys(counts).map((k) => ({
+      name: k.toUpperCase(),
+      value: counts[k],
+    }))
+
+    if (pieData.length === 0) {
+      pieData.push({ name: '暂无节点', value: 1 })
+    }
+
+    if (pieInstance) {
+      pieInstance.setOption({
+        series: [{ data: pieData }],
+      })
+    }
+  } catch (err) {
+    console.error(err)
+  }
+}
+
 async function handleStartCore() {
   coreLoading.value = true
   try {
@@ -176,60 +219,87 @@ async function handleRestartCore() {
   }
 }
 
-function initChart() {
-  if (!chartRef.value) return
-  chartInstance = echarts.init(chartRef.value)
-  const option: echarts.EChartsOption = {
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['下载速率 (KB/s)', '上传速率 (KB/s)'], textStyle: { color: '#64748b' } },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: timeLabels,
-      axisLine: { lineStyle: { color: '#cbd5e1' } },
-    },
-    yAxis: {
-      type: 'value',
-      axisLine: { lineStyle: { color: '#cbd5e1' } },
-      splitLine: { lineStyle: { color: '#f1f5f9' } },
-    },
-    series: [
-      {
-        name: '下载速率 (KB/s)',
-        type: 'line',
-        smooth: true,
-        showSymbol: false,
-        areaStyle: { opacity: 0.15, color: '#10b981' },
-        lineStyle: { color: '#10b981', width: 2 },
-        itemStyle: { color: '#10b981' },
-        data: downloadHistory,
+function initCharts() {
+  if (chartRef.value) {
+    chartInstance = echarts.init(chartRef.value)
+    chartInstance.setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['下载速率 (KB/s)', '上传速率 (KB/s)'], textStyle: { color: '#64748b' } },
+      grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: timeLabels,
+        axisLine: { lineStyle: { color: '#cbd5e1' } },
       },
-      {
-        name: '上传速率 (KB/s)',
-        type: 'line',
-        smooth: true,
-        showSymbol: false,
-        areaStyle: { opacity: 0.15, color: '#3b82f6' },
-        lineStyle: { color: '#3b82f6', width: 2 },
-        itemStyle: { color: '#3b82f6' },
-        data: uploadHistory,
+      yAxis: {
+        type: 'value',
+        axisLine: { lineStyle: { color: '#cbd5e1' } },
+        splitLine: { lineStyle: { color: '#f1f5f9' } },
       },
-    ],
+      series: [
+        {
+          name: '下载速率 (KB/s)',
+          type: 'line',
+          smooth: true,
+          showSymbol: false,
+          areaStyle: { opacity: 0.15, color: '#10b981' },
+          lineStyle: { color: '#10b981', width: 2 },
+          itemStyle: { color: '#10b981' },
+          data: downloadHistory,
+        },
+        {
+          name: '上传速率 (KB/s)',
+          type: 'line',
+          smooth: true,
+          showSymbol: false,
+          areaStyle: { opacity: 0.15, color: '#3b82f6' },
+          lineStyle: { color: '#3b82f6', width: 2 },
+          itemStyle: { color: '#3b82f6' },
+          data: uploadHistory,
+        },
+      ],
+    })
   }
-  chartInstance.setOption(option)
+
+  if (pieChartRef.value) {
+    pieInstance = echarts.init(pieChartRef.value)
+    pieInstance.setOption({
+      tooltip: { trigger: 'item' },
+      legend: { bottom: '5%', left: 'center' },
+      series: [
+        {
+          name: '节点协议',
+          type: 'pie',
+          radius: ['45%', '70%'],
+          avoidLabelOverlap: false,
+          itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
+          label: { show: false, position: 'center' },
+          emphasis: {
+            label: { show: true, fontSize: 16, fontWeight: 'bold' },
+          },
+          data: [],
+        },
+      ],
+    })
+  }
 }
 
 onMounted(() => {
-  initChart()
+  initCharts()
   fetchStatus()
+  fetchProtocolDistribution()
   pollTimer = setInterval(fetchStatus, 2000)
-  window.addEventListener('resize', () => chartInstance?.resize())
+  window.addEventListener('resize', () => {
+    chartInstance?.resize()
+    pieInstance?.resize()
+  })
 })
 
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
   if (chartInstance) chartInstance.dispose()
+  if (pieInstance) pieInstance.dispose()
 })
 </script>
 
@@ -278,6 +348,7 @@ onUnmounted(() => {
 
 .status-details {
   display: flex;
+  flex-wrap: wrap;
   gap: 20px;
   color: #64748b;
   font-size: 13px;

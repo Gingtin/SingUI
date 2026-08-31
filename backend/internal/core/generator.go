@@ -24,32 +24,30 @@ type LogConfig struct {
 }
 
 type DNSConfig struct {
-	Servers []DNSServer `json:"servers"`
-	Rules   []DNSRule   `json:"rules,omitempty"`
+	Servers  []DNSServer `json:"servers"`
+	Rules    []DNSRule   `json:"rules,omitempty"`
+	Strategy string      `json:"strategy,omitempty"`
 }
 
 type DNSServer struct {
-	Tag     string `json:"tag"`
-	Address string `json:"address"`
-	Detour  string `json:"detour,omitempty"`
+	Tag          string `json:"tag"`
+	Address      string `json:"address"`
+	Detour       string `json:"detour,omitempty"`
+	AddressResolver string `json:"address_resolver,omitempty"`
+	Strategy     string `json:"strategy,omitempty"`
 }
 
 type DNSRule struct {
 	Outbound []string `json:"outbound,omitempty"`
+	Geosite  []string `json:"geosite,omitempty"`
+	Domain   []string `json:"domain,omitempty"`
 	Server   string   `json:"server"`
 }
 
 type RouteConfig struct {
-	Rules               []RouteRule `json:"rules"`
-	AutoDetectInterface bool        `json:"auto_detect_interface"`
-	Final               string      `json:"final"`
-}
-
-type RouteRule struct {
-	Inbound  []string `json:"inbound,omitempty"`
-	Protocol []string `json:"protocol,omitempty"`
-	Outbound string   `json:"outbound"`
-	RuleSet  []string `json:"rule_set,omitempty"`
+	Rules               []map[string]interface{} `json:"rules"`
+	AutoDetectInterface bool                     `json:"auto_detect_interface"`
+	Final               string                   `json:"final"`
 }
 
 type ExperimentalConfig struct {
@@ -80,17 +78,32 @@ type StatsConfig struct {
 	Users    []string `json:"users,omitempty"`
 }
 
-// GenerateConfig assembles the full Sing-box JSON config from database models
-func GenerateConfig(inbounds []models.Inbound, clashPort, clashSecret string) (*SingboxConfig, error) {
+// GenerateConfig assembles the complete Sing-box configuration
+func GenerateConfig(inbounds []models.Inbound, rules []models.RoutingRule, dns models.DNSSettings, clashPort, clashSecret string) (*SingboxConfig, error) {
+	// DNS Servers setup
+	dnsServers := []DNSServer{
+		{Tag: "local-dns", Address: dns.LocalDNS, Detour: "direct"},
+		{Tag: "remote-dns", Address: dns.RemoteDNS, Detour: "direct"},
+	}
+	if dns.ChinaDNS != "" {
+		dnsServers = append(dnsServers, DNSServer{Tag: "china-dns", Address: dns.ChinaDNS, Detour: "direct"})
+	}
+
+	strategy := dns.Strategy
+	if strategy == "" {
+		strategy = "prefer_ipv4"
+	}
+
 	cfg := &SingboxConfig{
 		Log: LogConfig{
 			Level:     "info",
 			Timestamp: true,
 		},
 		DNS: DNSConfig{
-			Servers: []DNSServer{
-				{Tag: "local-dns", Address: "local", Detour: "direct"},
-				{Tag: "remote-dns", Address: "https://1.1.1.1/dns-query", Detour: "direct"},
+			Servers:  dnsServers,
+			Strategy: strategy,
+			Rules: []DNSRule{
+				{Geosite: []string{"cn"}, Server: "china-dns"},
 			},
 		},
 		Inbounds: make([]interface{}, 0),
@@ -102,9 +115,7 @@ func GenerateConfig(inbounds []models.Inbound, clashPort, clashSecret string) (*
 		Route: RouteConfig{
 			AutoDetectInterface: true,
 			Final:               "direct",
-			Rules: []RouteRule{
-				{Protocol: []string{"dns"}, Outbound: "dns-out"},
-			},
+			Rules:               make([]map[string]interface{}, 0),
 		},
 		Experimental: ExperimentalConfig{
 			ClashAPI: &ClashAPIConfig{
@@ -124,6 +135,7 @@ func GenerateConfig(inbounds []models.Inbound, clashPort, clashSecret string) (*
 		},
 	}
 
+	// 1. Process Inbounds
 	for _, in := range inbounds {
 		if !in.Enable {
 			continue
@@ -136,7 +148,6 @@ func GenerateConfig(inbounds []models.Inbound, clashPort, clashSecret string) (*
 			"listen_port": in.Port,
 		}
 
-		// Protocol specific configurations
 		switch in.Protocol {
 		case "vless":
 			users := make([]map[string]interface{}, 0)
@@ -154,8 +165,6 @@ func GenerateConfig(inbounds []models.Inbound, clashPort, clashSecret string) (*
 				users = append(users, userObj)
 			}
 			inboundMap["users"] = users
-
-			// TLS / Reality / Stream
 			parseStreamSettings(in, inboundMap)
 
 		case "vmess":
@@ -254,27 +263,83 @@ func GenerateConfig(inbounds []models.Inbound, clashPort, clashSecret string) (*
 		cfg.Inbounds = append(cfg.Inbounds, inboundMap)
 	}
 
+	// 2. Process Route Rules
+	for _, r := range rules {
+		if !r.Enable {
+			continue
+		}
+		ruleObj := map[string]interface{}{
+			"outbound": r.Outbound,
+		}
+		if r.Protocol != "" {
+			ruleObj["protocol"] = []string{r.Protocol}
+		}
+		if r.Network != "" {
+			ruleObj["network"] = []string{r.Network}
+		}
+		if r.Domain != "" {
+			var domains []string
+			if err := json.Unmarshal([]byte(r.Domain), &domains); err == nil && len(domains) > 0 {
+				var geositeList []string
+				var domainList []string
+				for _, d := range domains {
+					if len(d) > 8 && d[:8] == "geosite:" {
+						geositeList = append(geositeList, d[8:])
+					} else {
+						domainList = append(domainList, d)
+					}
+				}
+				if len(geositeList) > 0 {
+					ruleObj["geosite"] = geositeList
+				}
+				if len(domainList) > 0 {
+					ruleObj["domain"] = domainList
+				}
+			}
+		}
+		if r.IP != "" {
+			var ips []string
+			if err := json.Unmarshal([]byte(r.IP), &ips); err == nil && len(ips) > 0 {
+				var geoipList []string
+				var ipList []string
+				for _, ip := range ips {
+					if len(ip) > 6 && ip[:6] == "geoip:" {
+						geoipList = append(geoipList, ip[6:])
+					} else {
+						ipList = append(ipList, ip)
+					}
+				}
+				if len(geoipList) > 0 {
+					ruleObj["geoip"] = geoipList
+				}
+				if len(ipList) > 0 {
+					ruleObj["ip_cidr"] = ipList
+				}
+			}
+		}
+		cfg.Route.Rules = append(cfg.Route.Rules, ruleObj)
+	}
+
 	return cfg, nil
 }
 
 func parseStreamSettings(in models.Inbound, inboundMap map[string]interface{}) {
 	var stream struct {
-		Network         string            `json:"network"`
-		Security        string            `json:"security"`
-		TLS             *TLSConfig        `json:"tls"`
-		Reality         *RealityConfig    `json:"reality"`
-		Transport       *TransportConfig  `json:"transport"`
-		Multiplex       *MultiplexConfig  `json:"multiplex"`
+		Network   string           `json:"network"`
+		Security  string           `json:"security"`
+		TLS       *TLSConfig       `json:"tls"`
+		Reality   *RealityConfig   `json:"reality"`
+		Transport *TransportConfig `json:"transport"`
 	}
 	_ = json.Unmarshal([]byte(in.StreamSettings), &stream)
 
 	if in.Security == "reality" || stream.Security == "reality" {
-		if stream.Reality != nil {
+		if stream.Reality != nil && len(stream.Reality.ServerNames) > 0 {
 			realityMap := map[string]interface{}{
-				"enabled":              true,
-				"handshake":            map[string]interface{}{"server": stream.Reality.ServerNames[0], "server_port": 443},
-				"private_key":          stream.Reality.PrivateKey,
-				"short_id":             stream.Reality.ShortIds,
+				"enabled":   true,
+				"handshake": map[string]interface{}{"server": stream.Reality.ServerNames[0], "server_port": 443},
+				"private_key": stream.Reality.PrivateKey,
+				"short_id":    stream.Reality.ShortIds,
 				"max_time_difference": "1m",
 			}
 			inboundMap["tls"] = realityMap
@@ -319,10 +384,6 @@ type TransportConfig struct {
 	Type        string `json:"type"` // ws, grpc, httpupgrade
 	Path        string `json:"path"`
 	ServiceName string `json:"service_name"`
-}
-
-type MultiplexConfig struct {
-	Enabled bool `json:"enabled"`
 }
 
 // WriteConfigToFile serializes config and writes it to target path
