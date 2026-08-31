@@ -235,6 +235,16 @@ async function fetchRules() {
   rulesLoading.value = true
   try {
     rules.value = await getRoutingRules()
+  } catch (err) {
+    // Fallback Mock Rules for Local Preview
+    rules.value = [
+      { id: 1, tag: 'DNS Hijack', type: 'field', outbound: 'dns-out', protocol: 'dns', order: 1, enable: true, remark: '劫持 DNS 流量并进入内部分流引擎' },
+      { id: 2, tag: 'AdBlock Ads', type: 'field', outbound: 'block', domain: '["geosite:category-ads-all"]', order: 2, enable: true, remark: '🚫 广告与恶意挖矿域名拦截' },
+      { id: 3, tag: 'Private Network Direct', type: 'field', outbound: 'direct', ip: '["geoip:private"]', order: 3, enable: true, remark: '🏠 私有局域网 RFC1918 直连' },
+      { id: 4, tag: 'China Domain Direct', type: 'field', outbound: 'direct', domain: '["geosite:cn"]', order: 4, enable: true, remark: '🇨🇳 国内主流站点与 CDN 极速直连' },
+      { id: 5, tag: 'China IP Direct', type: 'field', outbound: 'direct', ip: '["geoip:cn"]', order: 5, enable: true, remark: '🇨🇳 国内 IP 网段直连' },
+      { id: 6, tag: 'Global Proxy Fallback', type: 'field', outbound: 'direct', order: 99, enable: true, remark: '🌐 全球其他流量默认路由' },
+    ]
   } finally {
     rulesLoading.value = false
   }

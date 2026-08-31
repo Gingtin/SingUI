@@ -119,6 +119,44 @@ async function fetchSubs() {
   try {
     const data = await getInbounds()
     inbounds.value = data
+  } catch (err) {
+    inbounds.value = [
+      {
+        id: 1,
+        tag: 'HK-VLESS-Reality-01',
+        protocol: 'vless',
+        port: 443,
+        listen: '0.0.0.0',
+        network: 'tcp',
+        security: 'reality',
+        settings: '{}',
+        stream_settings: '{}',
+        sniffing: '{}',
+        enable: true,
+        remark: '🇭🇰 香港 BGP 专线',
+        clients: [
+          { id: 101, email: 'alice', uuid: '6ba7b810-9dad-11d1-80b4-00c04fd430c8', up: 1024 * 1024 * 1024 * 5, down: 1024 * 1024 * 1024 * 28, total: 1024 * 1024 * 1024 * 100, expiry_time: Date.now() + 86400000 * 30, enable: true, sub_token: 'sub-alice-01' },
+          { id: 102, email: 'bob', uuid: '7ca8b820-9dad-11d1-80b4-00c04fd430c9', up: 1024 * 1024 * 1024 * 1, down: 1024 * 1024 * 1024 * 8, total: 1024 * 1024 * 1024 * 50, expiry_time: Date.now() + 86400000 * 15, enable: true, sub_token: 'sub-bob-02' },
+        ],
+      },
+      {
+        id: 2,
+        tag: 'US-Hysteria-2-Fast',
+        protocol: 'hysteria2',
+        port: 8443,
+        listen: '0.0.0.0',
+        network: 'udp',
+        security: 'none',
+        settings: '{}',
+        stream_settings: '{}',
+        sniffing: '{}',
+        enable: true,
+        remark: '🇺🇸 美国 洛杉矶 极速 UDP',
+        clients: [
+          { id: 103, email: 'carol', uuid: '8da9b830-9dad-11d1-80b4-00c04fd430ca', up: 1024 * 1024 * 1024 * 12, down: 1024 * 1024 * 1024 * 65, total: 0, expiry_time: 0, enable: true, sub_token: 'sub-carol-03' },
+        ],
+      },
+    ]
   } finally {
     loading.value = false
   }

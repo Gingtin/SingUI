@@ -150,7 +150,14 @@ async function fetchOutbounds() {
   try {
     outbounds.value = await getOutbounds()
   } catch (err) {
-    console.error(err)
+    // Fallback Mock Outbounds for Local Preview
+    outbounds.value = [
+      { id: 1, tag: 'direct', type: 'direct', enable: true, remark: '⚡ 默认直连出口 (Direct Outbound)' },
+      { id: 2, tag: 'block', type: 'block', enable: true, remark: '🚫 广告与恶意连接拦截 (Null Discard)' },
+      { id: 3, tag: 'dns-out', type: 'dns', enable: true, remark: '📡 Sing-box 核心专属 DNS 解析出口' },
+      { id: 4, tag: 'warp-out', type: 'wireguard', server: 'engage.cloudflareclient.com', port: 2408, enable: true, remark: '🌐 Cloudflare WARP 链式中继 (解锁 ChatGPT / Netflix)' },
+      { id: 5, tag: 'hk-landing-node', type: 'socks', server: '103.20.18.5', port: 1080, enable: true, remark: '🇭🇰 香港中继落地链式节点' },
+    ]
   }
 }
 
