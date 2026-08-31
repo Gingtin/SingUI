@@ -42,7 +42,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-          cache-dependency-path: backend/go.sum
 
       - name: Build Backend Binary
         env:
@@ -51,6 +50,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           cd backend
+          go mod tidy
           VERSION=${{ github.ref_name }}
           if [ -z "$VERSION" ]; then VERSION="v1.0.0-dev"; fi
           go build -ldflags="-s -w -X 'main.Version=${VERSION}'" -o singbox-ui-${{ matrix.target.os }}-${{ matrix.target.arch }}${{ matrix.target.ext }} ./cmd/server
