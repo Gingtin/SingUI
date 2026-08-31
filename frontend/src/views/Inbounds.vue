@@ -262,11 +262,11 @@
               </a-col>
             </a-row>
 
-            <!-- WebSocket Options -->
-            <div v-if="inboundForm.network === 'ws'" class="config-box">
-              <div class="box-title">WebSocket 进阶参数</div>
+            <!-- WebSocket / HTTPUpgrade Options -->
+            <div v-if="inboundForm.network === 'ws' || inboundForm.network === 'httpupgrade'" class="config-box">
+              <div class="box-title">{{ inboundForm.network === 'ws' ? 'WebSocket' : 'HTTPUpgrade' }} 进阶参数</div>
               <a-form-item label="请求路径 (Path)">
-                <a-input v-model:value="transportForm.path" placeholder="/vless-ws" />
+                <a-input v-model:value="transportForm.path" placeholder="/path" />
               </a-form-item>
               <a-form-item label="自定义 Host 头">
                 <a-input v-model:value="transportForm.host" placeholder="yourdomain.com" />
@@ -316,6 +316,21 @@
                 <a-col :span="12">
                   <a-form-item label="0-RTT 极速握手">
                     <a-switch v-model:checked="tuicForm.zero_rtt_handshake" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <a-form-item label="心跳时间 (Heartbeat)">
+                    <a-input v-model:value="tuicForm.heartbeat" placeholder="10s" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="UDP 转发模式">
+                    <a-select v-model:value="tuicForm.udp_relay_mode">
+                      <a-select-option value="quic">QUIC</a-select-option>
+                      <a-select-option value="native">Native</a-select-option>
+                    </a-select>
                   </a-form-item>
                 </a-col>
               </a-row>
@@ -405,6 +420,9 @@
             <a-form-item label="启用流量嗅探 (Sniffing)">
               <a-switch v-model:checked="sniffForm.enabled" />
             </a-form-item>
+            <a-form-item label="仅用于路由 (route_only)">
+              <a-switch v-model:checked="sniffForm.route_only" />
+            </a-form-item>
             <div v-if="sniffForm.enabled">
               <a-form-item label="嗅探目标协议">
                 <a-checkbox-group v-model:value="sniffForm.dest_override">
@@ -429,25 +447,41 @@
       width="860px"
     >
       <div class="drawer-header-actions mb-4">
-        <a-button type="primary" size="small" @click="openAddClientModal">
-          <template #prefix><PlusOutlined /></template>
-          添加用户
-        </a-button>
-        <a-button v-if="selectedClientKeys.length > 0" danger size="small" @click="handleBatchDeleteClients">
-          批量删除 ({{ selectedClientKeys.length }})
-        </a-button>
+        <div>
+          <a-button type="primary" size="small" @click="openAddClientModal">
+            <template #prefix><PlusOutlined /></template>
+            添加用户
+          </a-button>
+          <a-button type="dashed" size="small" @click="openBatchAddClientModal" style="margin-left: 8px;">
+            批量添加用户
+          </a-button>
+          <a-button v-if="selectedClientKeys.length > 0" danger size="small" @click="handleBatchDeleteClients" style="margin-left: 8px;">
+            批量删除 ({{ selectedClientKeys.length }})
+          </a-button>
+        </div>
+        <div>
+          <a-input-search
+            v-model:value="clientSearchKeyword"
+            placeholder="搜索邮箱或UUID/密码..."
+            style="width: 200px;"
+            allow-clear
+          />
+        </div>
       </div>
 
       <a-table
         :columns="clientColumns"
-        :data-source="currentInbound?.clients || []"
+        :data-source="filteredClients"
         row-key="id"
         :row-selection="{ selectedRowKeys: selectedClientKeys, onChange: onClientSelectChange }"
         :pagination="false"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'email'">
-            <b>{{ record.email }}</b>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span v-if="record.online" class="online-dot"></span>
+              <b>{{ record.email }}</b>
+            </div>
           </template>
 
           <template v-if="column.key === 'traffic'">
@@ -489,10 +523,18 @@
           <a-input v-model:value="clientForm.email" placeholder="如: user1" />
         </a-form-item>
 
-        <a-form-item label="UUID / 认证密钥">
+        <a-form-item v-if="['vless', 'vmess'].includes(currentInbound?.protocol || '')" label="UUID / 用户标识">
           <a-input v-model:value="clientForm.uuid">
             <template #addonAfter>
               <span style="cursor: pointer;" @click="generateClientUUID">自动生成</span>
+            </template>
+          </a-input>
+        </a-form-item>
+
+        <a-form-item v-if="['trojan', 'hysteria2', 'anytls', 'shadowsocks', 'tuic'].includes(currentInbound?.protocol || '')" label="密码 (Password)">
+          <a-input v-model:value="clientForm.password">
+            <template #addonAfter>
+              <span style="cursor: pointer;" @click="generateClientPassword">随机生成</span>
             </template>
           </a-input>
         </a-form-item>
@@ -526,6 +568,43 @@
           <a-col :span="12">
             <a-form-item label="最大并发 IP 限制">
               <a-input-number v-model:value="clientForm.limit_ip" :min="0" placeholder="0 为不限制" style="width: 100%;" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-form>
+    </a-modal>
+
+    <!-- Batch Client Modal -->
+    <a-modal
+      v-model:open="batchClientModalVisible"
+      title="批量添加用户"
+      @ok="handleBatchGenerateClients"
+      :confirmLoading="modalLoading"
+      width="600px"
+    >
+      <a-form :model="batchClientForm" layout="vertical">
+        <a-row :gutter="16">
+          <a-col :span="12">
+            <a-form-item label="生成数量" required>
+              <a-input-number v-model:value="batchClientForm.count" :min="1" :max="100" style="width: 100%;" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="用户名前缀" required>
+              <a-input v-model:value="batchClientForm.prefix" placeholder="例如: user_" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+
+        <a-row :gutter="16">
+          <a-col :span="12">
+            <a-form-item label="总流量限制 (GB)">
+              <a-input-number v-model:value="batchClientForm.quotaGB" :min="0" placeholder="0 为不限制" style="width: 100%;" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="有效期 (天)">
+              <a-input-number v-model:value="batchClientForm.expiryDays" :min="0" placeholder="0 为永久" style="width: 100%;" />
             </a-form-item>
           </a-col>
         </a-row>
@@ -668,6 +747,7 @@ const sniffForm = reactive({
   enabled: true,
   dest_override: ['http', 'tls'],
   timeout: '300ms',
+  route_only: false,
 })
 
 const hyForm = reactive({
@@ -680,6 +760,7 @@ const tuicForm = reactive({
   congestion_control: 'bbr',
   zero_rtt_handshake: false,
   heartbeat: '10s',
+  udp_relay_mode: 'quic',
 })
 
 const ssForm = reactive({
@@ -704,6 +785,66 @@ const clientForm = reactive<Partial<Client>>({
 })
 const clientQuotaGB = ref<number>(0)
 const clientExpiryDayjs = ref<Dayjs | null>(null)
+
+// Client Search & Batch
+const clientSearchKeyword = ref('')
+const filteredClients = computed(() => {
+  if (!currentInbound.value || !currentInbound.value.clients) return []
+  const kw = clientSearchKeyword.value.toLowerCase().trim()
+  if (!kw) return currentInbound.value.clients
+  return currentInbound.value.clients.filter(c => {
+    return c.email?.toLowerCase().includes(kw) || 
+           c.uuid?.toLowerCase().includes(kw) || 
+           c.password?.toLowerCase().includes(kw)
+  })
+})
+
+const batchClientModalVisible = ref(false)
+const batchClientForm = reactive({
+  count: 5,
+  prefix: 'user_',
+  quotaGB: 0,
+  expiryDays: 0
+})
+
+function openBatchAddClientModal() {
+  batchClientModalVisible.value = true
+}
+
+async function handleBatchGenerateClients() {
+  if (!currentInbound.value?.id) return
+  modalLoading.value = true
+  try {
+    for (let i = 1; i <= batchClientForm.count; i++) {
+      const payload: Partial<Client> = {
+        email: `${batchClientForm.prefix}${i}`,
+        enable: true,
+        total: batchClientForm.quotaGB ? batchClientForm.quotaGB * 1024 * 1024 * 1024 : 0,
+        expiry_time: batchClientForm.expiryDays ? Date.now() + batchClientForm.expiryDays * 86400000 : 0,
+        flow: currentInbound.value.security === 'reality' ? 'xtls-rprx-vision' : '',
+      }
+      
+      if (['vless', 'vmess'].includes(currentInbound.value.protocol)) {
+        const res = await getRandomUUID()
+        payload.uuid = res.uuid
+      } else {
+        payload.password = Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 12)
+      }
+      await addClient(currentInbound.value.id, payload as any)
+    }
+    message.success(`成功批量添加 ${batchClientForm.count} 个用户`)
+    batchClientModalVisible.value = false
+    fetchInbounds()
+  } catch(e) {
+    message.error('批量添加失败')
+  } finally {
+    modalLoading.value = false
+  }
+}
+
+function generateClientPassword() {
+  clientForm.password = Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 12)
+}
 
 // QR Modal
 const qrModalVisible = ref(false)
@@ -963,6 +1104,7 @@ function openEditInboundModal(record: Inbound) {
     sniffForm.enabled = !!sn.enabled
     sniffForm.dest_override = sn.dest_override || ['http', 'tls']
     sniffForm.timeout = sn.timeout || '300ms'
+    sniffForm.route_only = !!sn.route_only
   } catch {}
 
   inboundModalVisible.value = true
@@ -1023,7 +1165,12 @@ async function handleSaveInbound() {
       ...inboundForm,
       stream_settings: JSON.stringify(streamSettingsObj),
       settings: JSON.stringify(settingsObj),
-      sniffing: JSON.stringify(sniffForm),
+      sniffing: JSON.stringify({
+        enabled: sniffForm.enabled,
+        dest_override: sniffForm.dest_override,
+        timeout: sniffForm.timeout,
+        route_only: sniffForm.route_only
+      }),
     }
 
     if (isEditInbound.value && inboundForm.id) {
@@ -1464,5 +1611,13 @@ onMounted(() => {
 
 .mt-2 {
   margin-top: 8px;
+}
+.online-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #10b981;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.5);
 }
 </style>

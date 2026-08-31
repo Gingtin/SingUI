@@ -77,6 +77,9 @@
                 <a-select-option value="direct">Direct (直连)</a-select-option>
                 <a-select-option value="block">Block (拦截丢弃)</a-select-option>
                 <a-select-option value="dns-out">DNS-OUT (DNS解析)</a-select-option>
+                <a-select-option value="selector">Selector (手动选择)</a-select-option>
+                <a-select-option value="urltest">URLTest (自动测速优选)</a-select-option>
+                <a-select-option value="fallback">Fallback (故障转移)</a-select-option>
                 <a-select-option value="socks">SOCKS5</a-select-option>
                 <a-select-option value="http">HTTP</a-select-option>
                 <a-select-option value="wireguard">WireGuard / WARP</a-select-option>
@@ -94,6 +97,41 @@
             </a-form-item>
           </a-col>
         </a-row>
+
+        <a-row :gutter="16" v-if="!['direct', 'block', 'dns-out', 'selector', 'urltest', 'fallback'].includes(form.type || '')">
+          <a-col :span="24">
+            <a-form-item label="前置链式代理 (Detour)">
+              <a-select v-model:value="form.detour" allow-clear placeholder="留空为不使用前置代理">
+                <a-select-option v-for="o in outbounds.filter(x => x.tag !== form.tag && !isSystemTag(x.tag))" :key="o.tag" :value="o.tag">
+                  {{ o.tag }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+
+        <div v-if="['selector', 'urltest', 'fallback'].includes(form.type || '')">
+          <a-form-item label="成员节点 (Outbounds)" required>
+            <a-select v-model:value="form.outbounds" mode="multiple" placeholder="选择包含的出站节点">
+              <a-select-option v-for="o in outbounds.filter(x => x.tag !== form.tag)" :key="o.tag" :value="o.tag">
+                {{ o.tag }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          
+          <a-row :gutter="16" v-if="['urltest', 'fallback'].includes(form.type || '')">
+            <a-col :span="12">
+              <a-form-item label="测速链接 (URL)">
+                <a-input v-model:value="form.url" placeholder="https://www.gstatic.com/generate_204" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="测速间隔 (Interval)">
+                <a-input v-model:value="form.interval" placeholder="3m" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </div>
 
         <div v-if="['socks', 'http', 'vless', 'vmess', 'trojan', 'hysteria2', 'shadowsocks', 'wireguard'].includes(form.type || '')">
           <a-row :gutter="16">
@@ -311,6 +349,10 @@ const form = reactive<Partial<Outbound>>({
   port: 0,
   enable: true,
   remark: '',
+  detour: '',
+  outbounds: [],
+  url: '',
+  interval: ''
 })
 
 function isSystemTag(tag: string) {
@@ -361,14 +403,17 @@ function openCreateModal() {
     remark: '',
     username: '', password: '', uuid: '', flow: '', security: 'tls', sni: '', fingerprint: '', alterId: 0,
     security_method: '', obfs_type: '', obfs_password: '', up_mbps: 100, down_mbps: 100, method: '',
-    private_key: '', peer_public_key: '', pre_shared_key: '', reserved: '', mtu: 1280, local_address_ipv4: '', local_address_ipv6: ''
+    private_key: '', peer_public_key: '', pre_shared_key: '', reserved: '', mtu: 1280, local_address_ipv4: '', local_address_ipv6: '',
+    detour: '', outbounds: [], url: '', interval: ''
   })
   modalVisible.value = true
 }
 
 function openEditModal(record: Outbound) {
   isEdit.value = true
-  Object.assign(form, record)
+  Object.assign(form, {
+    detour: '', outbounds: [], url: '', interval: '', ...record
+  })
   modalVisible.value = true
 }
 

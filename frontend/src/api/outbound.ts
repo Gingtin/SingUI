@@ -30,6 +30,10 @@ export interface Outbound {
   mtu?: number
   local_address_ipv4?: string
   local_address_ipv6?: string
+  detour?: string
+  outbounds?: string[]
+  url?: string
+  interval?: string
 }
 
 export const getOutbounds = () => request.get<any, Outbound[]>('/outbounds')

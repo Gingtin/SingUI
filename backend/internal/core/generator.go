@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/singbox-ui/singbox-ui/internal/database/models"
 )
@@ -164,14 +165,8 @@ func GenerateConfig(inbounds []models.Inbound, outbounds []models.Outbound, rule
 				outObj["server_port"] = o.Port
 			}
 
-			if o.Settings != "" {
-				var extra map[string]interface{}
-				if err := json.Unmarshal([]byte(o.Settings), &extra); err == nil {
-					for k, v := range extra {
-						outObj[k] = v
-					}
-				}
-			}
+			parseOutboundSettings(o, outObj)
+
 			cfg.Outbounds = append(cfg.Outbounds, outObj)
 		}
 	}
@@ -285,6 +280,59 @@ func GenerateConfig(inbounds []models.Inbound, outbounds []models.Outbound, rule
 			inboundMap["password"] = ssSettings.Password
 			parseStreamSettings(in, inboundMap)
 
+		case "shadowtls":
+			var settings struct {
+				Version  int    `json:"version"`
+				Password string `json:"password"`
+			}
+			_ = json.Unmarshal([]byte(in.Settings), &settings)
+			if settings.Version == 0 {
+				settings.Version = 3
+			}
+			inboundMap["version"] = settings.Version
+			inboundMap["password"] = settings.Password
+			
+			users := make([]map[string]interface{}, 0)
+			for _, c := range in.Clients {
+				if !c.Enable { continue }
+				users = append(users, map[string]interface{}{ "name": c.Email, "password": c.Password })
+			}
+			if len(users) > 0 {
+				inboundMap["users"] = users
+			}
+			parseStreamSettings(in, inboundMap)
+
+		case "socks", "http":
+			users := make([]map[string]interface{}, 0)
+			for _, c := range in.Clients {
+				if !c.Enable { continue }
+				users = append(users, map[string]interface{}{
+					"username": c.Email,
+					"password": c.Password,
+				})
+			}
+			if len(users) > 0 {
+				inboundMap["users"] = users
+			}
+			parseStreamSettings(in, inboundMap)
+
+		case "wireguard":
+			var wg struct {
+				LocalAddress []string                 `json:"local_address"`
+				PrivateKey   string                   `json:"private_key"`
+				Peers        []map[string]interface{} `json:"peers"`
+			}
+			_ = json.Unmarshal([]byte(in.Settings), &wg)
+			if len(wg.LocalAddress) > 0 {
+				inboundMap["local_address"] = wg.LocalAddress
+			}
+			if wg.PrivateKey != "" {
+				inboundMap["private_key"] = wg.PrivateKey
+			}
+			if wg.Peers != nil {
+				inboundMap["peers"] = wg.Peers
+			}
+
 		case "hysteria2":
 			users := make([]map[string]interface{}, 0)
 			for _, c := range in.Clients {
@@ -317,6 +365,13 @@ func GenerateConfig(inbounds []models.Inbound, outbounds []models.Outbound, rule
 					"type":     "salamander",
 					"password": hySettings.ObfsPass,
 				}
+			}
+			if hySettings.HopPorts != "" {
+				ports := strings.Split(hySettings.HopPorts, ",")
+				for i, p := range ports {
+					ports[i] = strings.TrimSpace(p)
+				}
+				inboundMap["hop_ports"] = ports
 			}
 			inboundMap["ignore_client_bandwidth"] = false
 			parseStreamSettings(in, inboundMap)
@@ -416,6 +471,118 @@ func GenerateConfig(inbounds []models.Inbound, outbounds []models.Outbound, rule
 	return cfg, nil
 }
 
+func parseOutboundSettings(o models.Outbound, outObj map[string]interface{}) {
+	if o.Settings == "" {
+		return
+	}
+	var extra map[string]interface{}
+	if err := json.Unmarshal([]byte(o.Settings), &extra); err != nil {
+		return
+	}
+
+	for k, v := range extra {
+		outObj[k] = v
+	}
+
+	if detour, ok := extra["detour"]; ok {
+		outObj["detour"] = detour
+	}
+	if multiplex, ok := extra["multiplex"]; ok {
+		outObj["multiplex"] = multiplex
+	}
+
+	switch o.Type {
+	case "vless", "vmess", "trojan", "hysteria2", "tuic", "shadowsocks", "socks", "http":
+		security, _ := extra["security"].(string)
+		network, _ := extra["network"].(string)
+
+		if security == "tls" || security == "reality" {
+			tlsMap := map[string]interface{}{
+				"enabled": true,
+			}
+			if sni, ok := extra["sni"]; ok {
+				tlsMap["server_name"] = sni
+			}
+			if insecure, ok := extra["insecure"]; ok {
+				tlsMap["insecure"] = insecure
+			}
+			if fp, ok := extra["fingerprint"]; ok {
+				tlsMap["utls"] = map[string]interface{}{
+					"enabled":     true,
+					"fingerprint": fp,
+				}
+			}
+			if security == "reality" {
+				realityMap := map[string]interface{}{
+					"enabled": true,
+				}
+				if pk, ok := extra["public_key"]; ok {
+					realityMap["public_key"] = pk
+				}
+				if sid, ok := extra["short_id"]; ok {
+					realityMap["short_id"] = sid
+				}
+				tlsMap["reality"] = realityMap
+			}
+			outObj["tls"] = tlsMap
+
+			delete(outObj, "sni")
+			delete(outObj, "insecure")
+			delete(outObj, "fingerprint")
+			delete(outObj, "public_key")
+			delete(outObj, "short_id")
+		}
+
+		if network == "ws" || network == "grpc" || network == "httpupgrade" {
+			transMap := map[string]interface{}{
+				"type": network,
+			}
+			if path, ok := extra["path"]; ok {
+				transMap["path"] = path
+			}
+			if headers, ok := extra["headers"]; ok {
+				transMap["headers"] = headers
+			}
+			if svc, ok := extra["service_name"]; ok {
+				transMap["service_name"] = svc
+			}
+			outObj["transport"] = transMap
+
+			delete(outObj, "path")
+			delete(outObj, "headers")
+			delete(outObj, "service_name")
+		}
+
+	case "wireguard":
+		if localAddr, ok := extra["local_address"]; ok {
+			outObj["local_address"] = localAddr
+		}
+		if priv, ok := extra["private_key"]; ok {
+			outObj["private_key"] = priv
+		}
+		if pub, ok := extra["peer_public_key"]; ok {
+			outObj["peer_public_key"] = pub
+		}
+		if res, ok := extra["reserved"]; ok {
+			outObj["reserved"] = res
+		}
+		if mtu, ok := extra["mtu"]; ok {
+			outObj["mtu"] = mtu
+		}
+
+	case "selector", "urltest", "fallback":
+		if out, ok := extra["outbounds"]; ok {
+			outObj["outbounds"] = out
+		}
+		if url, ok := extra["url"]; ok {
+			outObj["url"] = url
+		}
+		if interval, ok := extra["interval"]; ok {
+			outObj["interval"] = interval
+		}
+	}
+}
+
 func parseStreamSettings(in models.Inbound, inboundMap map[string]interface{}) {
 	var stream struct {
 		Network   string           `json:"network"`
@@ -423,6 +590,7 @@ func parseStreamSettings(in models.Inbound, inboundMap map[string]interface{}) {
 		TLS       *TLSConfig       `json:"tls"`
 		Reality   *RealityConfig   `json:"reality"`
 		Transport *TransportConfig `json:"transport"`
+		Multiplex *MultiplexConfig `json:"multiplex"`
 	}
 	_ = json.Unmarshal([]byte(in.StreamSettings), &stream)
 
@@ -476,6 +644,10 @@ func parseStreamSettings(in models.Inbound, inboundMap map[string]interface{}) {
 		}
 		inboundMap["transport"] = transMap
 	}
+
+	if stream.Multiplex != nil {
+		inboundMap["multiplex"] = stream.Multiplex
+	}
 }
 
 type TLSConfig struct {
@@ -504,6 +676,12 @@ type TransportConfig struct {
 	Headers       map[string]string `json:"headers,omitempty"`
 	EarlyDataName string            `json:"early_data_header_name,omitempty"`
 	MaxEarlyData  int               `json:"max_early_data,omitempty"`
+}
+
+type MultiplexConfig struct {
+	Enabled        bool `json:"enabled"`
+	Padding        bool `json:"padding,omitempty"`
+	BrutalCapacity int  `json:"brutal_capacity,omitempty"`
 }
 
 // WriteConfigToFile serializes config and writes it to target path

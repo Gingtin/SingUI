@@ -11,6 +11,7 @@ import (
 
 	"github.com/singbox-ui/singbox-ui/internal/database"
 	"github.com/singbox-ui/singbox-ui/internal/database/models"
+	"gorm.io/gorm"
 )
 
 type ClashConnection struct {
@@ -24,15 +25,15 @@ type ClashConnection struct {
 }
 
 type Metadata struct {
-	Network     string `json:"network"`
-	Type        string `json:"type"`
-	SourceIP    string `json:"sourceIP"`
-	DestinationIP string `json:"destinationIP"`
-	SourcePort  string `json:"sourcePort"`
+	Network         string `json:"network"`
+	Type            string `json:"type"`
+	SourceIP        string `json:"sourceIP"`
+	DestinationIP   string `json:"destinationIP"`
+	SourcePort      string `json:"sourcePort"`
 	DestinationPort string `json:"destinationPort"`
-	Host        string `json:"host"`
-	InboundTag  string `json:"inboundTag"`
-	InboundUser string `json:"inboundUser"`
+	Host            string `json:"host"`
+	InboundTag      string `json:"inboundTag"`
+	InboundUser     string `json:"inboundUser"`
 }
 
 type ClashConnectionsResponse struct {
@@ -41,20 +42,27 @@ type ClashConnectionsResponse struct {
 	Connections   []ClashConnection `json:"connections"`
 }
 
+type connSnapshot struct {
+	Upload   int64
+	Download int64
+}
+
 type StatsManager struct {
-	clashPort   string
-	clashSecret string
-	client      *http.Client
-	mu          sync.Mutex
+	clashPort     string
+	clashSecret   string
+	client        *http.Client
+	mu            sync.Mutex
+	lastConnStats map[string]connSnapshot
 }
 
 var StatsInstance *StatsManager
 
 func InitStatsManager(port, secret string) *StatsManager {
 	StatsInstance = &StatsManager{
-		clashPort:   port,
-		clashSecret: secret,
-		client:      &http.Client{Timeout: 3 * time.Second},
+		clashPort:     port,
+		clashSecret:   secret,
+		client:        &http.Client{Timeout: 3 * time.Second},
+		lastConnStats: make(map[string]connSnapshot),
 	}
 	go StatsInstance.startPeriodicSync()
 	return StatsInstance
@@ -88,11 +96,123 @@ func (sm *StatsManager) GetActiveConnections() (*ClashConnectionsResponse, error
 	return &data, nil
 }
 
+func (sm *StatsManager) disconnect(connID string) {
+	url := fmt.Sprintf("http://127.0.0.1:%s/connections/%s", sm.clashPort, connID)
+	req, _ := http.NewRequest("DELETE", url, nil)
+	if sm.clashSecret != "" {
+		req.Header.Set("Authorization", "Bearer "+sm.clashSecret)
+	}
+	sm.client.Do(req)
+}
+
+func (sm *StatsManager) syncTrafficAndConnections() {
+	active, err := sm.GetActiveConnections()
+	if err != nil || active == nil {
+		return
+	}
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	clientDeltas := make(map[string]struct {
+		Up   int64
+		Down int64
+	})
+
+	clientIPs := make(map[string]map[string][]string)
+	currentConns := make(map[string]bool)
+
+	for _, conn := range active.Connections {
+		currentConns[conn.ID] = true
+		key := conn.Metadata.InboundUser
+		if key == "" {
+			continue // No user identified
+		}
+
+		deltaUp := conn.Upload
+		deltaDown := conn.Download
+		if last, ok := sm.lastConnStats[conn.ID]; ok {
+			deltaUp -= last.Upload
+			deltaDown -= last.Download
+			if deltaUp < 0 {
+				deltaUp = 0
+			}
+			if deltaDown < 0 {
+				deltaDown = 0
+			}
+		}
+
+		sm.lastConnStats[conn.ID] = connSnapshot{
+			Upload:   conn.Upload,
+			Download: conn.Download,
+		}
+
+		if deltaUp > 0 || deltaDown > 0 {
+			stat := clientDeltas[key]
+			stat.Up += deltaUp
+			stat.Down += deltaDown
+			clientDeltas[key] = stat
+		}
+
+		if clientIPs[key] == nil {
+			clientIPs[key] = make(map[string][]string)
+		}
+		clientIPs[key][conn.Metadata.SourceIP] = append(clientIPs[key][conn.Metadata.SourceIP], conn.ID)
+	}
+
+	for connID := range sm.lastConnStats {
+		if !currentConns[connID] {
+			delete(sm.lastConnStats, connID)
+		}
+	}
+
+	if database.DB != nil {
+		for key, deltas := range clientDeltas {
+			database.DB.Model(&models.Client{}).Where("uuid = ? OR email = ? OR password = ?", key, key, key).
+				Updates(map[string]interface{}{
+					"up":   gorm.Expr("up + ?", deltas.Up),
+					"down": gorm.Expr("down + ?", deltas.Down),
+				})
+		}
+
+		var clients []models.Client
+		if err := database.DB.Where("enable = ?", true).Find(&clients).Error; err == nil {
+			for _, c := range clients {
+				if c.LimitIP <= 0 {
+					continue
+				}
+
+				var ipMap map[string][]string
+				if m, ok := clientIPs[c.UUID]; ok {
+					ipMap = m
+				} else if m, ok := clientIPs[c.Email]; ok {
+					ipMap = m
+				} else if m, ok := clientIPs[c.Password]; ok {
+					ipMap = m
+				}
+
+				if ipMap != nil && len(ipMap) > c.LimitIP {
+					ipCount := 0
+					for _, conns := range ipMap {
+						ipCount++
+						if ipCount > c.LimitIP {
+							for _, connID := range conns {
+								sm.disconnect(connID)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 func (sm *StatsManager) startPeriodicSync() {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
+		sm.syncTrafficAndConnections()
 		sm.checkLimitsAndQuotas()
 	}
 }
