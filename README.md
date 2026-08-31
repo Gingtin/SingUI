@@ -2,13 +2,13 @@
 
 # SingUI
 
-**Next-Generation, High-Performance Web Management Panel for Sing-box**
+**Next-Generation Web Management Panel for Sing-box Core**
 
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Vue Version](https://img.shields.io/badge/Vue.js-3.4+-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)](https://vuejs.org)
-[![Sing-box Core](https://img.shields.io/badge/Sing--box-1.9+-blue?style=for-the-badge)](https://github.com/SagerNet/sing-box)
-[![Docker Support](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com)
-[![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org)
+[![Vue Version](https://img.shields.io/badge/Vue.js-3.4+-4FC08D?style=flat-square&logo=vue.js&logoColor=white)](https://vuejs.org)
+[![Sing-box](https://img.shields.io/badge/Sing--box-1.9+-blue?style=flat-square)](https://github.com/SagerNet/sing-box)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com)
+[![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 
 [**English**](README.md) • [**简体中文**](README_ZH.md)
 
@@ -16,79 +16,99 @@
 
 ---
 
-## 📖 Overview
+## Overview
 
-**SingUI** is a modern, feature-rich web management panel designed specifically for the **Sing-box** universal proxy platform. Engineered with Go and Vue 3, SingUI delivers a single-binary deployment with zero external dependencies, robust multi-client traffic accounting, one-click Reality keypair generation, comprehensive protocol configuration, and an adaptive universal subscription engine.
+**SingUI** is a lightweight, high-performance web management platform engineered specifically for **Sing-box** (v1.9+). Built with Go and Vue 3, SingUI packages the backend supervisor, dynamic config engine, and frontend assets into a **single standalone binary** with zero external runtime dependencies.
 
-Whether you are managing personal nodes or provisioning access for teams and communities, SingUI provides the performance, agility, and security you need.
-
----
-
-## ✨ Key Features
-
-- ⚡ **Native Sing-box Protocol Suite**:
-  - **VLESS**: Reality camouflage (one-click X25519 keypair & ShortID generation), `xtls-rprx-vision` flow, TCP, WebSocket, gRPC, HTTPUpgrade.
-  - **Hysteria 2**: Salamander obfuscation password, BBR / Brutal congestion control, and independent upstream/downstream bandwidth limits.
-  - **TUIC v5**: Native QUIC transport, BBR congestion control, and secure token authentication.
-  - **Shadowsocks 2022**: Full support for 2022 specifications (`2022-blake3-aes-128-gcm`, etc.) and classic ciphers.
-  - **Trojan & VMess**: Support for TLS, WebSocket, and gRPC transports.
-- 👥 **Multi-Client per Inbound Architecture**:
-  - Single listening port supporting multiple independent clients.
-  - Granular traffic accounting (Upload, Download, Total Quota) and expiration timers per user.
-  - Automatic quota exhaustion and expiration enforcement with instant core hot-reloading.
-  - Simultaneous IP concurrency limits.
-- 📡 **Universal Multi-Format Subscription Engine**:
-  - **Sing-box Official Client JSON** (`flag=sing-box`)
-  - **Clash Meta / Mihomo YAML** (`flag=clash` / `flag=meta`) with auto-generated Proxy Groups and routing rule-sets.
-  - **Standard Base64 / URI Links** (`vless://`, `hysteria2://`, `tuic://`, `ss://`, `trojan://`)
-  - **Client User Self-Service Portal** (`/sub/view/:token`) with visual quota meters and QR codes.
-- 📊 **Real-Time Monitoring & Observability**:
-  - Live system resource gauges (CPU %, RAM %, Disk %, and Network I/O throughput).
-  - Dynamic ECharts line charts for real-time upstream & downstream traffic rates.
-  - Built-in Sing-box process supervisor with WebSocket live log streaming.
-  - Clash API inspection for active connections, target hosts, and source IP geolocation.
-- 🤖 **Operations & Automation**:
-  - Automated Telegram Bot for quota warnings, node offline alerts, and scheduled database backups.
-  - SQLite one-click backup download and database restoration.
-  - ACME SSL automation and configurable panel routing paths.
-- 📦 **Single-Binary Zero-Dependency Packaging**:
-  - Vue 3 frontend is embedded directly into the Go binary (`embed.FS`). No Node.js or external runtime needed on production servers.
+SingUI brings granular multi-client traffic accounting, automated Reality X25519 keypair negotiation, dynamic rule-set routing, and adaptive multi-format subscription pipelines to modern Sing-box deployments.
 
 ---
 
-## ⚡ Protocol Support Matrix
+## Architecture & Capabilities
+
+```
+                  ┌───────────────────────────────┐
+                  │       SingUI Web Panel        │
+                  │   (Go Backend + Vue 3 SPA)    │
+                  └──────────────┬────────────────┘
+                                 │
+           ┌─────────────────────┼─────────────────────┐
+           ▼                     ▼                     ▼
+┌────────────────────┐ ┌───────────────────┐ ┌────────────────────┐
+│ Inbound & Clients  │ │  Routing & DNS    │ │ Universal Subs     │
+│ - VLESS Reality    │ │ - Rule-Set (SRS)  │ │ - Sing-box JSON    │
+│ - Hysteria 2       │ │ - Geosite / GeoIP │ │ - Clash Meta YAML  │
+│ - TUIC v5          │ │ - DoH / DoT       │ │ - Base64 URI List  │
+│ - Shadowsocks 2022 │ │ - FakeIP Engine   │ │ - Web User Portal  │
+└──────────┬─────────┘ └─────────┬─────────┘ └─────────┬──────────┘
+           │                     │                     │
+           └─────────────────────┼─────────────────────┘
+                                 ▼
+                     ┌───────────────────────┐
+                     │ Atomic Config Check   │
+                     │  (sing-box check)     │
+                     └───────────┬───────────┘
+                                 ▼
+                     ┌───────────────────────┐
+                     │    Sing-box Core      │
+                     │ (Supervisor Process)  │
+                     └───────────────────────┘
+```
+
+### Core Highlights
+
+- **Native Protocol Suite**:
+  - **VLESS**: Reality camouflage with automatic X25519 keypair generation, ShortID rotation, `xtls-rprx-vision` flow control, and uTLS fingerprint simulation.
+  - **Hysteria 2**: UDP-based high-throughput transport with Salamander obfuscation and independent upstream/downstream bandwidth rate limits.
+  - **TUIC v5**: QUIC transport with BBR congestion control and 0-RTT handshake support.
+  - **Shadowsocks 2022**: Full compliance with Blake3 AEAD specifications (`2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`).
+  - **Trojan & VMess**: Support for TCP, WebSocket, gRPC, and HTTPUpgrade transports with TLS.
+- **Multi-Client Isolation**:
+  - Multiple independent client credentials per listening port.
+  - Per-user traffic tracking (Upload / Download / Total Limit), expiration dates, and IP concurrency limits.
+  - Automatic quota exhaustion and expiration enforcement with atomic core reloading.
+- **Dynamic Rule-Set & DNS Routing**:
+  - Visual route management supporting `geosite` and `geoip` rule sets.
+  - Granular outbound actions (`DIRECT`, `BLOCK`, `DNS-OUT`).
+  - Split DNS configuration with dedicated Remote DoH and China Direct DNS resolvers.
+- **Atomic Validation & Process Supervisor**:
+  - Pre-flight syntax validation via `sing-box check` before applying configuration changes to prevent core crashes.
+  - Built-in process supervisor with WebSocket real-time log streaming and crash recovery.
+  - Clash API controller for live connection tracing and throughput monitoring.
+
+---
+
+## Protocol & Transport Matrix
 
 | Protocol | Transports | Security / Camouflage | Multi-Client | Flow / Congestion |
 | :--- | :--- | :--- | :---: | :--- |
-| **VLESS** | TCP, WS, gRPC, HTTPUpgrade | Reality, TLS, None | ✅ | `xtls-rprx-vision` |
-| **Hysteria 2** | UDP | Salamander Obfs, TLS | ✅ | Brutal / BBR, Bandwidth Limits |
-| **TUIC v5** | UDP (QUIC) | TLS | ✅ | BBR, Congestion Control |
-| **Shadowsocks** | TCP, UDP | None (2022 Blake3 / AEAD) | ✅ | Multiplex |
+| **VLESS** | TCP, WS, gRPC, HTTPUpgrade | Reality (X25519), TLS | ✅ | `xtls-rprx-vision` |
+| **Hysteria 2** | UDP | Salamander Obfs, TLS | ✅ | BBR / Brutal, Rate Limit |
+| **TUIC v5** | UDP (QUIC) | TLS | ✅ | BBR, 0-RTT Handshake |
+| **Shadowsocks** | TCP, UDP | Blake3-AEAD (2022) | ✅ | Multiplex |
 | **Trojan** | TCP, WS, gRPC | TLS | ✅ | - |
 | **VMess** | TCP, WS, gRPC, HTTPUpgrade | TLS, None | ✅ | AlterID 0 |
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### Method 1: Linux One-Click Installer (Recommended)
+### 1. One-Click Linux Installation
 
-Run the following command on your Linux server (Debian / Ubuntu / CentOS / Alpine / Arch):
+Deploy SingUI on any modern Linux distribution (Debian, Ubuntu, CentOS, Alpine, Arch):
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/Gingtin/SingUI/main/scripts/install.sh)
 ```
 
-Once installed, open your browser and navigate to:
-- **URL**: `http://<your-server-ip>:2096`
+Access the panel at:
+- **URL**: `http://<server-ip>:2096`
 - **Default Username**: `admin`
 - **Default Password**: `admin`
 
-> ⚠️ **Security Tip**: Please change the default admin credentials immediately after your first login in **Settings**.
-
 ---
 
-### Method 2: Docker Compose
+### 2. Docker Deployment
 
 ```bash
 git clone https://github.com/Gingtin/SingUI.git
@@ -98,94 +118,72 @@ docker compose up -d
 
 ---
 
-### Method 3: Build from Source
+### 3. Build from Source
 
 #### Prerequisites
-- **Go**: 1.22 or higher
-- **Node.js**: 18+ & npm / pnpm
+- Go 1.22+
+- Node.js 20+
 
 ```bash
-# 1. Build the frontend assets
+# Build frontend assets
 cd frontend
 npm install
 npm run build
 
-# 2. Compile the Go backend
+# Compile single binary
 cd ../backend
 go build -ldflags="-s -w" -o ../singbox-ui ./cmd/server
 
-# 3. Launch the panel
+# Run SingUI
 ../singbox-ui -p 2096 -d data/singbox_ui.db
 ```
 
 ---
 
-## 🖥️ User Interface Preview
+## Subscription Endpoints
 
-- **Dashboard**: Real-time CPU, RAM, Disk, and live upstream/downstream network speed charts.
-- **Inbound Management**: Quick node creation wizard with one-click Reality X25519 keypair generation and multi-client traffic allocation.
-- **Subscription Center**: Export Sing-box JSON, Clash Meta YAML, Base64, and QR codes for seamless multi-platform imports.
-- **Real-Time Logs**: Interactive WebSocket terminal streamer with automatic log buffering.
-- **Settings & Backups**: Configurable ports, secret tokens, Telegram alerts, and database backup/restore.
+SingUI serves subscription profiles via `/sub/:token`:
 
----
-
-## 📡 Subscription Endpoints
-
-SingUI automatically delivers optimized configuration payloads based on query parameters or client User-Agents:
-
-| Format | URL Pattern | Supported Clients |
+| Client Type | Query Parameter | Delivered Format |
 | :--- | :--- | :--- |
-| **Sing-box JSON** | `/sub/:token?flag=sing-box` | Sing-box official client, Box4, SFA |
-| **Clash Meta YAML** | `/sub/:token?flag=clash` | Clash Verge Rev, Mihomo Party, Stash, Flclash |
-| **Base64 URI List** | `/sub/:token?flag=base64` | Shadowrocket, v2rayN, Quantumult X, Loon |
-| **Self-Service View** | `/sub/view/:token` | Web browser portal (usage meters, expiration date, QR codes) |
+| **Sing-box Client** | `?flag=sing-box` | Native Sing-box Client JSON |
+| **Clash Meta / Mihomo** | `?flag=clash` | Clash Meta YAML (Proxies, Proxy Groups, Rule Providers) |
+| **Universal Base64** | `?flag=base64` | Standard URI list (`vless://`, `hysteria2://`, etc.) |
+| **Web Self-Service** | `/sub/view/:token` | Browser portal with quota meters and QR codes |
 
-All subscription responses include standard `Subscription-Userinfo` headers (`upload=...; download=...; total=...; expire=...`) for client bandwidth meters.
+All responses include standard `Subscription-Userinfo` headers (`upload=...; download=...; total=...; expire=...`) for client bandwidth gauges.
 
 ---
 
-## 🔧 CLI Flags
+## CLI Options
 
 ```bash
 singbox-ui -h
   -p string
-        Web panel listening port (default: from DB or 2096)
+        Panel listening port (default: 2096)
   -d string
-        SQLite database path (default: "data/singbox_ui.db")
+        SQLite database file path (default: "data/singbox_ui.db")
   -reset-admin
-        Reset admin password to default 'admin'
-  -v    Print version information
+        Reset admin credentials to default (admin/admin)
+  -v    Show version
 ```
 
 ---
 
-## 🔒 Security Best Practices
+## Feedback & Issues
 
-1. **Firewall Rules**: Keep port `2096` (or your custom panel port) protected or use a reverse proxy (e.g. Nginx, Caddy) with an SSL certificate.
-2. **Reality Deployment**: When configuring VLESS Reality, use authoritative and widely deployed SNIs (e.g., `www.apple.com`, `addons.mozilla.org`, `www.cloudflare.com`).
-3. **Database Backups**: Regularly download SQLite database backups or configure the Telegram Bot for automatic weekly backup delivery.
+Encountered a bug or have a suggestion? Please open an issue on the [GitHub Issues](https://github.com/Gingtin/SingUI/issues) page.
 
 ---
 
-## 🤝 Contributing
+## Acknowledgments
 
-Contributions are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) for details on submitting issues, proposing features, and opening pull requests.
-
----
-
-## 📜 License
-
-SingUI is open-source software licensed under the [MIT License](LICENSE).
+- **[SagerNet/sing-box](https://github.com/SagerNet/sing-box)**: The universal proxy platform core.
+- **[XTLS/Xray-core](https://github.com/XTLS/Xray-core)**: Pioneers in Reality and XTLS specifications.
+- **[MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo)**: Rule-set and Clash Meta ecosystem standards.
 
 ---
 
-## ❤️ Acknowledgments & References
+## License
 
-We would like to express our gratitude to the following outstanding open-source projects that inspired and empowered the creation of **SingUI**:
-
-- **[Sing-box](https://github.com/SagerNet/sing-box)**: The universal proxy platform powering the high-performance core of SingUI.
-- **[3x-ui](https://github.com/MHSanaei/3x-ui)**: Pioneer in multi-client Xray panel UX and workflow design.
-- **[Marzban](https://github.com/Gozargah/Marzban)**: Excellent design concepts in multi-protocol subscription routing and user management.
-- **[s-ui](https://github.com/alireza0/s-ui)**: Early explorations in Sing-box web user interfaces.
-- **[Clash Meta / Mihomo](https://github.com/MetaCubeX/mihomo)**: Standard-setting rule provider and proxy provider specifications.
+This project is licensed under the [MIT License](LICENSE).

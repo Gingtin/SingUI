@@ -1,66 +1,15 @@
 # Contributing to SingUI
 
-Thank you for your interest in contributing to **SingUI**! We welcome contributions from developers of all skill levels.
+Contributions and feedback are welcome!
 
----
+## Issues & Discussions
 
-## 🛠️ Development Setup
+- **Bug Reports & Feature Requests**: Please use the [GitHub Issues](https://github.com/Gingtin/SingUI/issues) tracker.
+- Describe the expected behavior, actual behavior, and include Sing-box / panel logs if applicable.
 
-### 1. Prerequisites
-- **Go**: 1.22+
-- **Node.js**: 20+ & npm / pnpm
-- **Sing-box**: 1.9+ (Optional for local proxy testing)
+## Pull Requests
 
-### 2. Fork & Clone
-```bash
-git clone https://github.com/<your-username>/SingUI.git
-cd SingUI
-```
-
-### 3. Running Locally
-
-#### Frontend Development Server:
-```bash
-cd frontend
-npm install
-npm run dev
-# Running on http://localhost:3000 (proxies API calls to port 2096)
-```
-
-#### Backend Development Server:
-```bash
-cd backend
-go run ./cmd/server/main.go -p 2096
-# Running on http://localhost:2096
-```
-
----
-
-## 📋 Contribution Workflow
-
-1. **Create an Issue**: Before submitting major features, please open an Issue to discuss the architecture and design.
-2. **Create a Branch**:
-   ```bash
-   git checkout -b feat/your-feature-name
-   # or
-   git checkout -b fix/your-bug-fix
-   ```
-3. **Write Clean Code & Test**:
-   - Follow standard Go idioms (`gofmt`, `golint`).
-   - Follow Vue 3 Composition API & TypeScript best practices.
-   - Verify frontend build with `npm run build`.
-4. **Commit Guidelines**:
-   We recommend [Conventional Commits](https://www.conventionalcommits.org/):
-   - `feat: add new protocol support`
-   - `fix: resolve subscription format parsing error`
-   - `docs: update documentation`
-   - `refactor: optimize core process supervisor`
-5. **Submit a Pull Request**:
-   - Open a PR against the `main` branch.
-   - Describe the changes and reference any related issues.
-
----
-
-## 📜 Code of Conduct
-
-Please be respectful, constructive, and collaborative in all communications and discussions within the community.
+1. Fork the repository and create a feature branch (`git checkout -b feat/your-feature`).
+2. Verify frontend compilation (`npm run build` in `frontend/`).
+3. Follow idiomatic Go and Vue 3 / TypeScript conventions.
+4. Submit your PR against the `main` branch.
