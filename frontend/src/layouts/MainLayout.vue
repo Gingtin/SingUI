@@ -7,7 +7,7 @@
           <polyline points="2 17 12 22 22 17" />
           <polyline points="2 12 12 17 22 12" />
         </svg>
-        <span v-if="!collapsed" class="logo-text">Sing-box UI</span>
+        <span v-if="!collapsed" class="logo-text">SingUI</span>
       </div>
       <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="inline" @select="handleMenuSelect">
         <a-menu-item key="/dashboard">

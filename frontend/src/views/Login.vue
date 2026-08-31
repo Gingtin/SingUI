@@ -9,7 +9,7 @@
             <polyline points="2 12 12 17 22 12" />
           </svg>
         </div>
-        <h2>Sing-box UI</h2>
+        <h2>SingUI</h2>
         <p>现代、高效的 Sing-box 可视化管理面板</p>
       </div>
 
