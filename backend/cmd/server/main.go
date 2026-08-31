@@ -6,132 +6,131 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/robfig/cron/v3"
 	"github.com/singbox-ui/singbox-ui/internal/api"
 	"github.com/singbox-ui/singbox-ui/internal/core"
+	"github.com/singbox-ui/singbox-ui/internal/cronjob"
 	"github.com/singbox-ui/singbox-ui/internal/database"
 	"github.com/singbox-ui/singbox-ui/internal/database/models"
 	"github.com/singbox-ui/singbox-ui/internal/service"
-	"github.com/singbox-ui/singbox-ui/internal/telegram"
 )
 
 //go:embed dist/*
-var embedWebFS embed.FS
+var webDistFS embed.FS
 
-const Version = "v1.0.0"
+var (
+	Version   = "1.0.0"
+	BuildTime = "2026-08-31"
+)
 
 func main() {
-	portFlag := flag.String("p", "", "Web panel listen port (default from DB or 2096)")
-	dbFlag := flag.String("d", "data/singbox_ui.db", "SQLite database file path")
+	portFlag := flag.String("p", "", "Web panel listening port (default: from DB or 2096)")
+	dbPathFlag := flag.String("d", "data/singbox_ui.db", "SQLite database file path")
+	resetAdminFlag := flag.Bool("reset-admin", false, "Reset admin password to default 'admin'")
 	versionFlag := flag.Bool("v", false, "Show version")
-	resetAdminFlag := flag.Bool("reset-admin", false, "Reset admin password to 'admin'")
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Printf("Singbox-UI Panel %s\n", Version)
+		fmt.Printf("SingUI version %s (Built at %s)\n", Version, BuildTime)
 		return
 	}
 
-	log.Printf("[Main] Starting Singbox-UI Panel %s...\n", Version)
+	log.Printf("[SingUI] Starting SingUI v%s...\n", Version)
 
-	// 1. Initialize SQLite Database
-	db, err := database.InitDB(*dbFlag)
+	// 1. Initialize SQLite Database (with WAL mode enabled)
+	db, err := database.InitDB(*dbPathFlag)
 	if err != nil {
 		log.Fatalf("[DB] Failed to initialize database: %v\n", err)
 	}
 
+	// Handle Admin Reset
 	if *resetAdminFlag {
 		var admin models.User
 		if err := db.Where("username = ?", "admin").First(&admin).Error; err == nil {
 			_ = admin.SetPassword("admin")
 			db.Save(&admin)
-			log.Println("[Main] Admin password has been reset to: admin")
-			return
+			log.Println("[Auth] Admin password has been reset to: admin")
+		} else {
+			admin = models.User{Username: "admin", Role: "admin"}
+			_ = admin.SetPassword("admin")
+			db.Create(&admin)
+			log.Println("[Auth] Created admin user with password: admin")
 		}
+		return
 	}
 
-	// 2. Fetch Settings
-	settings, _ := service.SettingSvc.GetAllSettings()
-	port := settings["web_port"]
-	if *portFlag != "" {
-		port = *portFlag
-	}
-	if port == "" {
-		port = "2096"
-	}
+	// 2. Initialize Sing-box Process Supervisor
+	var binPathSetting, configPathSetting models.Setting
+	db.Where("key = ?", "singbox_bin_path").First(&binPathSetting)
+	db.Where("key = ?", "singbox_config_path").First(&configPathSetting)
 
-	binPath := settings["singbox_bin_path"]
+	binPath := binPathSetting.Value
 	if binPath == "" {
 		binPath = "sing-box"
 	}
-
-	configPath := settings["singbox_config_path"]
+	configPath := configPathSetting.Value
 	if configPath == "" {
 		configPath = "config/singbox_config.json"
 	}
 
-	clashPort := settings["clash_api_port"]
-	if clashPort == "" {
-		clashPort = "9090"
-	}
-	clashSecret := settings["clash_api_secret"]
-
-	// 3. Initialize Sing-box Core Supervisor & Config
-	_ = service.InboundSvc.SyncCoreConfig()
 	supervisor := core.InitSupervisor(binPath, configPath)
-	if err := supervisor.Start(); err != nil {
-		log.Printf("[Supervisor] Note: Failed to start sing-box binary (%s): %v. You can set correct binary path in Settings.\n", binPath, err)
+	_ = service.InboundSvc.SyncCoreConfig()
+	_ = supervisor.Start()
+
+	// 3. Initialize Stats Engine & Clash API Polling
+	var clashPortSetting, clashSecretSetting models.Setting
+	db.Where("key = ?", "clash_api_port").First(&clashPortSetting)
+	db.Where("key = ?", "clash_api_secret").First(&clashSecretSetting)
+
+	core.InitStatsEngine(clashPortSetting.Value, clashSecretSetting.Value)
+
+	// 4. Start Background Cronjobs
+	cronManager := cronjob.StartCronJobs()
+	defer cronManager.Stop()
+
+	// 5. Setup Web Router & Embedded Assets
+	var distSubFS fs.FS
+	if sub, err := fs.Sub(webDistFS, "dist"); err == nil {
+		distSubFS = sub
 	}
 
-	// 4. Initialize Clash API Stats Manager
-	core.InitStatsManager(clashPort, clashSecret)
+	router := api.SetupRouter(distSubFS)
 
-	// 5. Initialize Telegram Bot
-	if tgToken := settings["tg_bot_token"]; tgToken != "" {
-		tgChatID := settings["tg_chat_id"]
-		bot := telegram.InitTelegramBot(tgToken, tgChatID)
-		if bot != nil {
-			go bot.SendMessage(fmt.Sprintf("🚀 Sing-box UI %s has started on port %s", Version, port))
+	// Determine Listening Port
+	listenPort := "2096"
+	if *portFlag != "" {
+		listenPort = *portFlag
+	} else {
+		var portSetting models.Setting
+		if err := db.Where("key = ?", "web_port").First(&portSetting).Error; err == nil && portSetting.Value != "" {
+			listenPort = portSetting.Value
 		}
 	}
 
-	// 6. Setup Cron Tasks (Daily traffic reset, periodic report)
-	c := cron.New()
-	_, _ = c.AddFunc("0 0 1 * *", func() {
-		log.Println("[Cron] Running monthly traffic reset check...")
-	})
-	c.Start()
-	defer c.Stop()
-
-	// 7. Setup Static Web Assets
-	var webFS fs.FS
-	subFS, err := fs.Sub(embedWebFS, "dist")
-	if err == nil {
-		webFS = subFS
+	srv := &http.Server{
+		Addr:    ":" + listenPort,
+		Handler: router,
 	}
 
-	// 8. Start HTTP API & Web Server
-	router := api.SetupRouter(webFS)
-
-	// Graceful shutdown handling
+	// 6. Graceful Shutdown Listener
 	go func() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		<-sigChan
-		log.Println("[Main] Shutting down Singbox-UI...")
-		if supervisor != nil {
-			_ = supervisor.Stop()
+		log.Println("[SingUI] Shutting down SingUI gracefully...")
+		if core.Instance != nil {
+			_ = core.Instance.Stop()
 		}
+		_ = srv.Close()
 		os.Exit(0)
 	}()
 
-	addr := fmt.Sprintf("0.0.0.0:%s", port)
-	log.Printf("[Main] Singbox-UI listening on http://%s\n", addr)
-	if err := router.Run(addr); err != nil {
-		log.Fatalf("[Main] Server listen error: %v\n", err)
+	log.Printf("[SingUI] Web Panel listening on http://0.0.0.0:%s\n", listenPort)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("[SingUI] Server failed to start: %v\n", err)
 	}
 }
