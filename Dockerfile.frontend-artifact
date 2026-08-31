@@ -1,0 +1,14 @@
+# Frontend artifact stage
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
+# Final container
+FROM alpine:3.20
+WORKDIR /usr/local/singbox-ui
+COPY --from=frontend-builder /app/frontend/dist ./web/dist
+EXPOSE 2096
+CMD ["echo", "Frontend assets built successfully"]
