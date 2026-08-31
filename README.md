@@ -2,7 +2,7 @@
 
 # SingUI
 
-**Next-Generation Web Management Panel for Sing-box Core**
+**Next-Generation, High-Performance Web Management Platform for Sing-box Core**
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org)
 [![Vue Version](https://img.shields.io/badge/Vue.js-3.4+-4FC08D?style=flat-square&logo=vue.js&logoColor=white)](https://vuejs.org)
@@ -16,73 +16,93 @@
 
 ---
 
-## Overview
+## 📖 Overview
 
-**SingUI** is a lightweight, high-performance web management platform engineered specifically for **Sing-box** (v1.9+). Built with Go and Vue 3, SingUI packages the backend supervisor, dynamic config engine, and frontend assets into a **single standalone binary** with zero external runtime dependencies.
+**SingUI** is a lightweight, modern web management platform engineered specifically for the **Sing-box** universal proxy core. Built with Go and Vue 3, SingUI packages the core supervisor, dynamic configuration engine, multi-format subscription generator, and macOS-style dashboard into a **single standalone binary** with zero external runtime dependencies.
 
-SingUI brings granular multi-client traffic accounting, automated Reality X25519 keypair negotiation, dynamic rule-set routing, and adaptive multi-format subscription pipelines to modern Sing-box deployments.
-
----
-
-## Architecture & Capabilities
-
-```
-                  ┌───────────────────────────────┐
-                  │       SingUI Web Panel        │
-                  │   (Go Backend + Vue 3 SPA)    │
-                  └──────────────┬────────────────┘
-                                 │
-           ┌─────────────────────┼─────────────────────┐
-           ▼                     ▼                     ▼
-┌────────────────────┐ ┌───────────────────┐ ┌────────────────────┐
-│ Inbound & Clients  │ │  Routing & DNS    │ │ Universal Subs     │
-│ - VLESS Reality    │ │ - Rule-Set (SRS)  │ │ - Sing-box JSON    │
-│ - Hysteria 2       │ │ - Geosite / GeoIP │ │ - Clash Meta YAML  │
-│ - TUIC v5          │ │ - DoH / DoT       │ │ - Base64 URI List  │
-│ - Shadowsocks 2022 │ │ - FakeIP Engine   │ │ - Web User Portal  │
-└──────────┬─────────┘ └─────────┬─────────┘ └─────────┬──────────┘
-           │                     │                     │
-           └─────────────────────┼─────────────────────┘
-                                 ▼
-                     ┌───────────────────────┐
-                     │ Atomic Config Check   │
-                     │  (sing-box check)     │
-                     └───────────┬───────────┘
-                                 ▼
-                     ┌───────────────────────┐
-                     │    Sing-box Core      │
-                     │ (Supervisor Process)  │
-                     └───────────────────────┘
-```
-
-### Core Highlights
-
-- **Native Protocol Suite**:
-  - **VLESS**: Reality camouflage with automatic X25519 keypair generation, ShortID rotation, `xtls-rprx-vision` flow control, and uTLS fingerprint simulation.
-  - **Hysteria 2**: UDP-based high-throughput transport with Salamander obfuscation and independent upstream/downstream bandwidth rate limits.
-  - **TUIC v5**: QUIC transport with BBR congestion control and 0-RTT handshake support.
-  - **Shadowsocks 2022**: Full compliance with Blake3 AEAD specifications (`2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`).
-  - **Trojan & VMess**: Support for TCP, WebSocket, gRPC, and HTTPUpgrade transports with TLS.
-- **Multi-Client Isolation**:
-  - Multiple independent client credentials per listening port.
-  - Per-user traffic tracking (Upload / Download / Total Limit), expiration dates, and IP concurrency limits.
-  - Automatic quota exhaustion and expiration enforcement with atomic core reloading.
-- **Dynamic Rule-Set & DNS Routing**:
-  - Visual route management supporting `geosite` and `geoip` rule sets.
-  - Granular outbound actions (`DIRECT`, `BLOCK`, `DNS-OUT`).
-  - Split DNS configuration with dedicated Remote DoH and China Direct DNS resolvers.
-- **Atomic Validation & Process Supervisor**:
-  - Pre-flight syntax validation via `sing-box check` before applying configuration changes to prevent core crashes.
-  - Built-in process supervisor with WebSocket real-time log streaming and crash recovery.
-  - Clash API controller for live connection tracing and throughput monitoring.
+With an ultra-low memory footprint (**< 25MB RAM on VPS**), SingUI delivers single-port multi-client traffic accounting, automated Reality & AnyTLS key negotiation, Cloudflare WARP chain detours, multi-country rule-set routing, and automated kernel BBR / UDP buffer tuning.
 
 ---
 
-## Protocol & Transport Matrix
+## 🏗️ Architecture & Modules
+
+```
+                  ┌───────────────────────────────────────────────┐
+                  │            SingUI Web Panel (Vue 3)           │
+                  │       (macOS-Inspired Minimalist Design)      │
+                  └───────────────────────┬───────────────────────┘
+                                          │
+       ┌──────────────┬───────────────────┼───────────────────┬──────────────┐
+       ▼              ▼                   ▼                   ▼              ▼
+┌─────────────┐ ┌─────────────┐   ┌───────────────┐   ┌───────────────┐ ┌────────────┐
+│  Inbounds   │ │  Outbounds  │   │ Rule-Sets/DNS │   │ Subscriptions │ │ Diagnostics│
+│ - Reality   │ │ - Direct    │   │ - CN/IR/RU SRS│   │ - Sing-box    │ │ - Live WS  │
+│ - AnyTLS    │ │ - Block     │   │ - Split-DNS   │   │ - Clash Meta  │ │ - Clash API│
+│ - Hy2/TUIC  │ │ - WARP / WG │   │ - Anti-DPI    │   │ - Base64 URI  │ │ - raw JSON │
+│ - SS2022    │ │ - Detours   │   │ - FakeIP      │   │ - User Portal │ │ - Backups  │
+└──────┬──────┘ └──────┬──────┘   └───────┬───────┘   └───────┬───────┘ └─────┬──────┘
+       │               │                  │                   │               │
+       └───────────────┴──────────────────┼───────────────────┴───────────────┘
+                                          ▼
+                              ┌───────────────────────┐
+                              │  Atomic Syntax Check  │
+                              │   (sing-box check)    │
+                              └───────────┬───────────┘
+                                          ▼
+                              ┌───────────────────────┐
+                              │  Sing-box Core 1.9+   │
+                              │ (Supervisor Process)  │
+                              └───────────────────────┘
+```
+
+---
+
+## ✨ Key Capabilities
+
+### 1. Native Protocol Suite
+- **VLESS Reality & Vision**: Zero-certificate deployment with automated X25519 keypair generation, ShortID rotation, `xtls-rprx-vision` zero-copy flow, and uTLS fingerprint simulation (`chrome`, `firefox`, `safari`, `ios`).
+- **AnyTLS (Official Native Support)**: Mitigates TLS-in-TLS nested handshake fingerprinting using packet padding schemes and session multiplexing.
+- **Hysteria 2**: Salamander obfuscation password, BBR / Brutal congestion control, and independent upstream/downstream bandwidth rate limits.
+- **TUIC v5**: Native QUIC transport, BBR congestion control, and 0-RTT handshake support.
+- **Shadowsocks 2022**: Blake3-AEAD 2022 specifications (`2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`).
+- **Trojan & VMess**: TLS, WebSocket, gRPC, and HTTPUpgrade transports.
+
+### 2. Multi-Client per Inbound Architecture (3x-ui Paradigm)
+- Multiple independent client credentials per listening port.
+- Granular per-user traffic metering (Upload / Download / Total Quota), expiration timers, and IP concurrency limits.
+- Sub-second quota exhaustion and expiration enforcement with atomic core reloading.
+
+### 3. Outbounds & Cloudflare WARP Detours
+- Manage `direct`, `block`, `dns-out`, and custom proxy chains.
+- **Cloudflare WARP / WireGuard Detours**: Route selected traffic through Cloudflare WARP to bypass ChatGPT, Claude, Netflix, and OpenAI residential IP restrictions.
+
+### 4. Multi-Country Rule-Set Routing & Split-DNS
+- Full support for Sing-box 1.9+ binary `.srs` rule sets.
+- **One-Click Regional Optimization Presets**:
+  - 🇨🇳 **China Preset**: `geosite:cn` & `geoip:cn` Direct + Adblock + AliDNS / DNSPod + Remote DoH.
+  - 🇮🇷 **Iran Preset**: `geosite:ir` & `geoip:ir` Direct (banking, gov) + Shecan DNS + TLS Fragmentation anti-DPI.
+  - 🇷🇺 **Russia Preset**: `geosite:ru` & `geoip:ru` Direct (Gosuslugi, VK, Yandex) + Yandex / Quad9 DNS.
+  - 🌐 **Global Preset**: Private LAN Direct + standard proxy routing.
+
+### 5. Universal Subscription Pipelines
+- **Sing-box Official Client JSON** (`flag=sing-box`)
+- **Clash Meta / Mihomo YAML** (`flag=clash`) with auto-generated Proxy Groups and Rule Providers.
+- **Universal Base64 / URI Links** (`vless://`, `hysteria2://`, `tuic://`, `ss://`, `trojan://`)
+- **Web User Self-Service Portal** (`/sub/view/:token`) with visual bandwidth meters and QR codes.
+
+### 6. Robust Reliability & Ultra-Low Memory
+- **SQLite WAL Mode**: High-concurrency database engine with `PRAGMA journal_mode=WAL` preventing database locks.
+- **Zero-Crash Preflight Validation**: Every configuration is validated via `sing-box check` in a sandbox before applying.
+- **VPS Memory Footprint**: Less than **25MB RAM** resident memory.
+
+---
+
+## ⚡ Protocol & Feature Matrix
 
 | Protocol | Transports | Security / Camouflage | Multi-Client | Flow / Congestion |
 | :--- | :--- | :--- | :---: | :--- |
 | **VLESS** | TCP, WS, gRPC, HTTPUpgrade | Reality (X25519), TLS | ✅ | `xtls-rprx-vision` |
+| **AnyTLS** | TCP | Standard TLS, Padding | ✅ | Session Mux |
 | **Hysteria 2** | UDP | Salamander Obfs, TLS | ✅ | BBR / Brutal, Rate Limit |
 | **TUIC v5** | UDP (QUIC) | TLS | ✅ | BBR, 0-RTT Handshake |
 | **Shadowsocks** | TCP, UDP | Blake3-AEAD (2022) | ✅ | Multiplex |
@@ -91,24 +111,26 @@ SingUI brings granular multi-client traffic accounting, automated Reality X25519
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-### 1. One-Click Linux Installation
+### 1. Linux One-Click Installer (Recommended)
 
-Deploy SingUI on any modern Linux distribution (Debian, Ubuntu, CentOS, Alpine, Arch):
+Run the following command on Debian / Ubuntu / CentOS / Alpine / Arch:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/Gingtin/SingUI/main/scripts/install.sh)
 ```
 
-Access the panel at:
-- **URL**: `http://<server-ip>:2096`
+The installer automatically enables **Linux BBR** and **UDP kernel buffer optimizations** for peak Hysteria 2 / TUIC throughput.
+
+- **Panel URL**: `http://<your-server-ip>:2096`
 - **Default Username**: `admin`
 - **Default Password**: `admin`
+- **CLI Helper**: `sing-ui {start|stop|restart|status|reset-admin}`
 
 ---
 
-### 2. Docker Deployment
+### 2. Docker Compose Deployment
 
 ```bash
 git clone https://github.com/Gingtin/SingUI.git
@@ -134,56 +156,41 @@ npm run build
 cd ../backend
 go build -ldflags="-s -w" -o ../singbox-ui ./cmd/server
 
-# Run SingUI
+# Launch SingUI
 ../singbox-ui -p 2096 -d data/singbox_ui.db
 ```
 
 ---
 
-## Subscription Endpoints
-
-SingUI serves subscription profiles via `/sub/:token`:
-
-| Client Type | Query Parameter | Delivered Format |
-| :--- | :--- | :--- |
-| **Sing-box Client** | `?flag=sing-box` | Native Sing-box Client JSON |
-| **Clash Meta / Mihomo** | `?flag=clash` | Clash Meta YAML (Proxies, Proxy Groups, Rule Providers) |
-| **Universal Base64** | `?flag=base64` | Standard URI list (`vless://`, `hysteria2://`, etc.) |
-| **Web Self-Service** | `/sub/view/:token` | Browser portal with quota meters and QR codes |
-
-All responses include standard `Subscription-Userinfo` headers (`upload=...; download=...; total=...; expire=...`) for client bandwidth gauges.
-
----
-
-## CLI Options
+## 🔧 CLI Options
 
 ```bash
 singbox-ui -h
   -p string
-        Panel listening port (default: 2096)
+        Web panel port (default: 2096)
   -d string
-        SQLite database file path (default: "data/singbox_ui.db")
+        SQLite database path (default: "data/singbox_ui.db")
   -reset-admin
-        Reset admin credentials to default (admin/admin)
-  -v    Show version
+        Reset admin password to default (admin/admin)
+  -v    Show version information
 ```
 
 ---
 
-## Feedback & Issues
+## 💬 Feedback & Issues
 
-Encountered a bug or have a suggestion? Please open an issue on the [GitHub Issues](https://github.com/Gingtin/SingUI/issues) page.
+If you encounter any bugs or have feature requests, please submit an issue via [GitHub Issues](https://github.com/Gingtin/SingUI/issues).
 
 ---
 
-## Acknowledgments
+## ❤️ Acknowledgments
 
-- **[SagerNet/sing-box](https://github.com/SagerNet/sing-box)**: The universal proxy platform core.
+- **[SagerNet/sing-box](https://github.com/SagerNet/sing-box)**: The universal proxy platform powering the high-performance core of SingUI.
 - **[XTLS/Xray-core](https://github.com/XTLS/Xray-core)**: Pioneers in Reality and XTLS specifications.
-- **[MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo)**: Rule-set and Clash Meta ecosystem standards.
+- **[MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo)**: Standard-setting rule provider and Clash Meta proxy provider specifications.
 
 ---
 
-## License
+## 📜 License
 
-This project is licensed under the [MIT License](LICENSE).
+SingUI is open-source software licensed under the [MIT License](LICENSE).
