@@ -53,7 +53,7 @@ type RouteConfig struct {
 
 type RuleSetItem struct {
 	Tag            string `json:"tag"`
-	Type           string `json:"type"` // remote, local
+	Type           string `json:"type"`   // remote, local
 	Format         string `json:"format"` // binary, source
 	URL            string `json:"url,omitempty"`
 	Path           string `json:"path,omitempty"`
@@ -164,7 +164,6 @@ func GenerateConfig(inbounds []models.Inbound, outbounds []models.Outbound, rule
 				outObj["server_port"] = o.Port
 			}
 
-			// Parse extra settings if any
 			if o.Settings != "" {
 				var extra map[string]interface{}
 				if err := json.Unmarshal([]byte(o.Settings), &extra); err == nil {
@@ -188,8 +187,27 @@ func GenerateConfig(inbounds []models.Inbound, outbounds []models.Outbound, rule
 			"tag":         in.Tag,
 			"listen":      in.Listen,
 			"listen_port": in.Port,
-			"sniff":       true,
-			"sniff_timeout": "300ms",
+		}
+
+		// Sniffing
+		var sniff struct {
+			Enabled      bool     `json:"enabled"`
+			DestOverride []string `json:"dest_override"`
+			Timeout      string   `json:"timeout"`
+		}
+		if in.Sniffing != "" {
+			_ = json.Unmarshal([]byte(in.Sniffing), &sniff)
+		}
+		if sniff.Enabled {
+			inboundMap["sniff"] = true
+			if len(sniff.DestOverride) > 0 {
+				inboundMap["sniff_override_destination"] = true
+			}
+			if sniff.Timeout != "" {
+				inboundMap["sniff_timeout"] = sniff.Timeout
+			} else {
+				inboundMap["sniff_timeout"] = "300ms"
+			}
 		}
 
 		switch in.Protocol {
@@ -285,6 +303,7 @@ func GenerateConfig(inbounds []models.Inbound, outbounds []models.Outbound, rule
 				DownMbps   int    `json:"down_mbps"`
 				ObfsType   string `json:"obfs_type"`
 				ObfsPass   string `json:"obfs_password"`
+				HopPorts   string `json:"hop_ports"`
 			}
 			_ = json.Unmarshal([]byte(in.Settings), &hySettings)
 			if hySettings.UpMbps > 0 {
@@ -315,7 +334,22 @@ func GenerateConfig(inbounds []models.Inbound, outbounds []models.Outbound, rule
 				})
 			}
 			inboundMap["users"] = users
-			inboundMap["congestion_control"] = "bbr"
+
+			var tuicSettings struct {
+				CongestionControl string `json:"congestion_control"`
+				ZeroRttHandshake  bool   `json:"zero_rtt_handshake"`
+				Heartbeat         string `json:"heartbeat"`
+			}
+			_ = json.Unmarshal([]byte(in.Settings), &tuicSettings)
+			cc := tuicSettings.CongestionControl
+			if cc == "" {
+				cc = "bbr"
+			}
+			inboundMap["congestion_control"] = cc
+			inboundMap["zero_rtt_handshake"] = tuicSettings.ZeroRttHandshake
+			if tuicSettings.Heartbeat != "" {
+				inboundMap["heartbeat"] = tuicSettings.Heartbeat
+			}
 			parseStreamSettings(in, inboundMap)
 		}
 
@@ -394,9 +428,13 @@ func parseStreamSettings(in models.Inbound, inboundMap map[string]interface{}) {
 
 	if in.Security == "reality" || stream.Security == "reality" {
 		if stream.Reality != nil && len(stream.Reality.ServerNames) > 0 {
+			targetServer := stream.Reality.Dest
+			if targetServer == "" {
+				targetServer = stream.Reality.ServerNames[0]
+			}
 			realityMap := map[string]interface{}{
 				"enabled":             true,
-				"handshake":           map[string]interface{}{"server": stream.Reality.ServerNames[0], "server_port": 443},
+				"handshake":           map[string]interface{}{"server": targetServer, "server_port": 443},
 				"private_key":         stream.Reality.PrivateKey,
 				"short_id":            stream.Reality.ShortIds,
 				"max_time_difference": "1m",
@@ -409,6 +447,9 @@ func parseStreamSettings(in models.Inbound, inboundMap map[string]interface{}) {
 				"enabled":     true,
 				"server_name": stream.TLS.ServerName,
 			}
+			if len(stream.TLS.ALPN) > 0 {
+				tlsMap["alpn"] = stream.TLS.ALPN
+			}
 			if stream.TLS.CertPath != "" && stream.TLS.KeyPath != "" {
 				tlsMap["certificate_path"] = stream.TLS.CertPath
 				tlsMap["key_path"] = stream.TLS.KeyPath
@@ -418,31 +459,51 @@ func parseStreamSettings(in models.Inbound, inboundMap map[string]interface{}) {
 	}
 
 	if stream.Transport != nil && stream.Transport.Type != "" {
-		inboundMap["transport"] = map[string]interface{}{
-			"type":         stream.Transport.Type,
-			"path":         stream.Transport.Path,
-			"service_name": stream.Transport.ServiceName,
+		transMap := map[string]interface{}{
+			"type": stream.Transport.Type,
 		}
+		if stream.Transport.Path != "" {
+			transMap["path"] = stream.Transport.Path
+		}
+		if stream.Transport.ServiceName != "" {
+			transMap["service_name"] = stream.Transport.ServiceName
+		}
+		if stream.Transport.EarlyDataName != "" {
+			transMap["early_data_header_name"] = stream.Transport.EarlyDataName
+		}
+		if stream.Transport.MaxEarlyData > 0 {
+			transMap["max_early_data"] = stream.Transport.MaxEarlyData
+		}
+		inboundMap["transport"] = transMap
 	}
 }
 
 type TLSConfig struct {
-	ServerName string `json:"server_name"`
-	CertPath   string `json:"cert_path"`
-	KeyPath    string `json:"key_path"`
+	ServerName string   `json:"server_name"`
+	CertPath   string   `json:"cert_path"`
+	KeyPath    string   `json:"key_path"`
+	ALPN       []string `json:"alpn,omitempty"`
+	MinVersion string   `json:"min_version,omitempty"`
+	MaxVersion string   `json:"max_version,omitempty"`
 }
 
 type RealityConfig struct {
+	Dest        string   `json:"dest"`
 	ServerNames []string `json:"server_names"`
 	PrivateKey  string   `json:"private_key"`
 	PublicKey   string   `json:"public_key"`
 	ShortIds    []string `json:"short_ids"`
+	SpiderX     string   `json:"spider_x,omitempty"`
 }
 
 type TransportConfig struct {
-	Type        string `json:"type"` // ws, grpc, httpupgrade
-	Path        string `json:"path"`
-	ServiceName string `json:"service_name"`
+	Type          string            `json:"type"` // ws, grpc, httpupgrade
+	Path          string            `json:"path"`
+	Host          string            `json:"host"`
+	ServiceName   string            `json:"service_name"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	EarlyDataName string            `json:"early_data_header_name,omitempty"`
+	MaxEarlyData  int               `json:"max_early_data,omitempty"`
 }
 
 // WriteConfigToFile serializes config and writes it to target path

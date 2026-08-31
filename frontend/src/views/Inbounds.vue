@@ -4,7 +4,7 @@
     <div class="page-header">
       <div>
         <h2>入站节点管理</h2>
-        <p class="subtitle">高品质 Sing-box 1.9+ 原生多协议节点与多用户配额调度</p>
+        <p class="subtitle">深度支持 3x-ui 级全参数精细化配置：VLESS Reality、AnyTLS、Hysteria 2、TUIC、多传输层与流量探测</p>
       </div>
       <div class="header-actions">
         <a-radio-group v-model:value="viewMode" button-style="solid">
@@ -29,9 +29,10 @@
             style="width: 260px;"
             allow-clear
           />
-          <a-select v-model:value="protocolFilter" style="width: 140px;" placeholder="全部协议">
+          <a-select v-model:value="protocolFilter" style="width: 150px;" placeholder="全部协议">
             <a-select-option value="all">全部协议</a-select-option>
             <a-select-option value="vless">VLESS Reality</a-select-option>
+            <a-select-option value="anytls">AnyTLS</a-select-option>
             <a-select-option value="hysteria2">Hysteria 2</a-select-option>
             <a-select-option value="tuic">TUIC v5</a-select-option>
             <a-select-option value="shadowsocks">Shadowsocks</a-select-option>
@@ -59,7 +60,7 @@
             <div class="node-card-header">
               <div class="node-title">
                 <span class="protocol-icon" :style="{ backgroundColor: getProtocolBg(inbound.protocol) }">
-                  {{ inbound.protocol.substring(0, 2).toUpperCase() }}
+                  {{ inbound.protocol.substring(0, 3).toUpperCase() }}
                 </span>
                 <div class="node-info">
                   <span class="node-tag">{{ inbound.tag }}</span>
@@ -72,11 +73,11 @@
             <div class="node-card-body">
               <div class="node-meta">
                 <div class="meta-item">
-                  <span class="label">端口</span>
+                  <span class="label">监听端口</span>
                   <span class="val port">{{ inbound.port }}</span>
                 </div>
                 <div class="meta-item">
-                  <span class="label">传输/安全</span>
+                  <span class="label">传输 / 安全</span>
                   <span class="val">{{ inbound.network }} / {{ inbound.security }}</span>
                 </div>
                 <div class="meta-item">
@@ -179,139 +180,253 @@
       </template>
     </a-table>
 
-    <!-- Inbound Create/Edit Wizard Modal -->
+    <!-- Comprehensive Inbound Create/Edit Wizard Modal (3x-ui Full Schema) -->
     <a-modal
       v-model:open="inboundModalVisible"
       :title="isEditInbound ? '编辑入站节点' : '添加入站节点'"
-      width="720px"
+      width="820px"
       @ok="handleSaveInbound"
       :confirmLoading="modalLoading"
     >
-      <a-form :model="inboundForm" layout="vertical">
-        <a-row :gutter="16">
-          <a-col :span="12">
-            <a-form-item label="协议类型" required>
-              <a-select v-model:value="inboundForm.protocol" @change="onProtocolChange" :disabled="isEditInbound">
-                <a-select-option value="vless">VLESS (支持 Reality / Vision)</a-select-option>
-                <a-select-option value="hysteria2">Hysteria 2 (极速 UDP / Salamander)</a-select-option>
-                <a-select-option value="tuic">TUIC v5 (QUIC / BBR)</a-select-option>
-                <a-select-option value="shadowsocks">Shadowsocks 2022</a-select-option>
-                <a-select-option value="trojan">Trojan</a-select-option>
-                <a-select-option value="vmess">VMess</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="监听端口" required>
-              <a-input-number v-model:value="inboundForm.port" :min="1" :max="65535" style="width: 100%;" />
-            </a-form-item>
-          </a-col>
-        </a-row>
+      <a-tabs v-model:activeKey="modalActiveTab">
+        <!-- Tab 1: 基础设置 (Basic) -->
+        <a-tab-pane key="basic" tab="1. 基础配置 (Basic)">
+          <a-form :model="inboundForm" layout="vertical">
+            <a-row :gutter="16">
+              <a-col :span="12">
+                <a-form-item label="主协议 (Protocol)" required>
+                  <a-select v-model:value="inboundForm.protocol" @change="onProtocolChange" :disabled="isEditInbound">
+                    <a-select-option value="vless">VLESS (支持 Reality / Vision)</a-select-option>
+                    <a-select-option value="anytls">AnyTLS (官方原生防 TLS-in-TLS)</a-select-option>
+                    <a-select-option value="hysteria2">Hysteria 2 (UDP 极速 / Salamander)</a-select-option>
+                    <a-select-option value="tuic">TUIC v5 (QUIC / BBR)</a-select-option>
+                    <a-select-option value="shadowsocks">Shadowsocks 2022</a-select-option>
+                    <a-select-option value="trojan">Trojan</a-select-option>
+                    <a-select-option value="vmess">VMess</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item label="监听端口 (Port)" required>
+                  <a-input-number v-model:value="inboundForm.port" :min="1" :max="65535" style="width: 100%;" />
+                </a-form-item>
+              </a-col>
+            </a-row>
 
-        <a-row :gutter="16">
-          <a-col :span="12">
-            <a-form-item label="节点标签 (Tag)">
-              <a-input v-model:value="inboundForm.tag" placeholder="如: vless-reality-01" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="备注说明">
-              <a-input v-model:value="inboundForm.remark" placeholder="如: 香港优化节点" />
-            </a-form-item>
-          </a-col>
-        </a-row>
+            <a-row :gutter="16">
+              <a-col :span="12">
+                <a-form-item label="节点标签 (Tag)">
+                  <a-input v-model:value="inboundForm.tag" placeholder="如: vless-reality-01" />
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item label="监听 IP (Listen IP)">
+                  <a-input v-model:value="inboundForm.listen" placeholder="0.0.0.0 或 127.0.0.1" />
+                </a-form-item>
+              </a-col>
+            </a-row>
 
-        <a-row :gutter="16">
-          <a-col :span="12">
-            <a-form-item label="传输协议 (Network)">
-              <a-select v-model:value="inboundForm.network">
-                <a-select-option value="tcp">TCP</a-select-option>
-                <a-select-option value="udp">UDP</a-select-option>
-                <a-select-option value="ws">WebSocket</a-select-option>
-                <a-select-option value="grpc">gRPC</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="安全协议 (Security)">
-              <a-select v-model:value="inboundForm.security">
-                <a-select-option value="none">None</a-select-option>
-                <a-select-option value="tls">TLS</a-select-option>
-                <a-select-option value="reality">Reality (仅 VLESS)</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-        </a-row>
+            <a-row :gutter="16">
+              <a-col :span="24">
+                <a-form-item label="备注名称 (Remark)">
+                  <a-input v-model:value="inboundForm.remark" placeholder="如: 🇭🇰 香港 BGP 优化专线" />
+                </a-form-item>
+              </a-col>
+            </a-row>
+          </a-form>
+        </a-tab-pane>
 
-        <!-- Reality Settings Section -->
-        <div v-if="inboundForm.security === 'reality'" class="config-section">
-          <div class="section-title">
-            <span>Reality 伪装配置</span>
-            <a-button size="small" type="link" @click="generateRealityKeys">一键生成密钥对</a-button>
-          </div>
-          <a-form-item label="目标伪装域名 (SNI)">
-            <a-input v-model:value="realityForm.server_name" placeholder="www.apple.com / addons.mozilla.org / www.cloudflare.com" />
-          </a-form-item>
-          <a-row :gutter="16">
-            <a-col :span="12">
-              <a-form-item label="私钥 (Private Key)">
-                <a-input v-model:value="realityForm.private_key" />
+        <!-- Tab 2: 传输协议设置 (Transport) -->
+        <a-tab-pane key="transport" tab="2. 传输网络 (Transport)">
+          <a-form layout="vertical">
+            <a-row :gutter="16">
+              <a-col :span="12">
+                <a-form-item label="传输协议 (Network)">
+                  <a-select v-model:value="inboundForm.network">
+                    <a-select-option value="tcp">TCP (标准流)</a-select-option>
+                    <a-select-option value="udp">UDP (Hysteria2/TUIC专属)</a-select-option>
+                    <a-select-option value="ws">WebSocket (CDN优选)</a-select-option>
+                    <a-select-option value="grpc">gRPC (多路复用)</a-select-option>
+                    <a-select-option value="httpupgrade">HTTPUpgrade</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item label="安全伪装 (Security)">
+                  <a-select v-model:value="inboundForm.security">
+                    <a-select-option value="none">None (无加密)</a-select-option>
+                    <a-select-option value="tls">TLS (标准证书)</a-select-option>
+                    <a-select-option value="reality">Reality (借用域名伪装/免证书)</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+            </a-row>
+
+            <!-- WebSocket Options -->
+            <div v-if="inboundForm.network === 'ws'" class="config-box">
+              <div class="box-title">WebSocket 进阶参数</div>
+              <a-form-item label="请求路径 (Path)">
+                <a-input v-model:value="transportForm.path" placeholder="/vless-ws" />
               </a-form-item>
-            </a-col>
-            <a-col :span="12">
-              <a-form-item label="公钥 (Public Key)">
-                <a-input v-model:value="realityForm.public_key" />
+              <a-form-item label="自定义 Host 头">
+                <a-input v-model:value="transportForm.host" placeholder="yourdomain.com" />
               </a-form-item>
-            </a-col>
-          </a-row>
-          <a-form-item label="Short ID (8位 Hex)">
-            <a-input v-model:value="realityForm.short_id" />
-          </a-form-item>
-        </div>
+            </div>
 
-        <!-- Hysteria 2 Settings -->
-        <div v-if="inboundForm.protocol === 'hysteria2'" class="config-section">
-          <div class="section-title">Hysteria 2 速率与混淆</div>
-          <a-row :gutter="16">
-            <a-col :span="12">
-              <a-form-item label="上行速率上限 (Mbps)">
-                <a-input-number v-model:value="hyForm.up_mbps" :min="0" placeholder="0 为不限制" style="width: 100%;" />
+            <!-- gRPC Options -->
+            <div v-if="inboundForm.network === 'grpc'" class="config-box">
+              <div class="box-title">gRPC 进阶参数</div>
+              <a-form-item label="Service Name (服务名)">
+                <a-input v-model:value="transportForm.service_name" placeholder="vless-grpc" />
               </a-form-item>
-            </a-col>
-            <a-col :span="12">
-              <a-form-item label="下行速率上限 (Mbps)">
-                <a-input-number v-model:value="hyForm.down_mbps" :min="0" placeholder="0 为不限制" style="width: 100%;" />
-              </a-form-item>
-            </a-col>
-          </a-row>
-          <a-form-item label="Salamander 混淆密码 (可选)">
-            <a-input v-model:value="hyForm.obfs_password" placeholder="留空表示不开启混淆" />
-          </a-form-item>
-        </div>
+            </div>
 
-        <!-- Shadowsocks 2022 Settings -->
-        <div v-if="inboundForm.protocol === 'shadowsocks'" class="config-section">
-          <div class="section-title">Shadowsocks 加密配置</div>
-          <a-form-item label="加密方法 (Cipher)">
-            <a-select v-model:value="ssForm.method">
-              <a-select-option value="2022-blake3-aes-128-gcm">2022-blake3-aes-128-gcm (推荐)</a-select-option>
-              <a-select-option value="2022-blake3-aes-256-gcm">2022-blake3-aes-256-gcm</a-select-option>
-              <a-select-option value="aes-128-gcm">aes-128-gcm</a-select-option>
-              <a-select-option value="chacha20-ietf-poly1305">chacha20-ietf-poly1305</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item label="服务器主密码">
-            <a-input v-model:value="ssForm.password" placeholder="主密码" />
-          </a-form-item>
-        </div>
-      </a-form>
+            <!-- Hysteria 2 Options -->
+            <div v-if="inboundForm.protocol === 'hysteria2'" class="config-box">
+              <div class="box-title">Hysteria 2 速率与混淆</div>
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <a-form-item label="上行速率上限 (Mbps)">
+                    <a-input-number v-model:value="hyForm.up_mbps" :min="0" placeholder="0 不限速" style="width: 100%;" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="下行速率上限 (Mbps)">
+                    <a-input-number v-model:value="hyForm.down_mbps" :min="0" placeholder="0 不限速" style="width: 100%;" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              <a-form-item label="Salamander 混淆密码 (可选)">
+                <a-input v-model:value="hyForm.obfs_password" placeholder="留空表示不开启混淆" />
+              </a-form-item>
+            </div>
+
+            <!-- TUIC v5 Options -->
+            <div v-if="inboundForm.protocol === 'tuic'" class="config-box">
+              <div class="box-title">TUIC v5 拥塞控制与握手</div>
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <a-form-item label="拥塞控制算法">
+                    <a-select v-model:value="tuicForm.congestion_control">
+                      <a-select-option value="bbr">BBR (推荐)</a-select-option>
+                      <a-select-option value="cubic">Cubic</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="0-RTT 极速握手">
+                    <a-switch v-model:checked="tuicForm.zero_rtt_handshake" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </div>
+
+            <!-- Shadowsocks 2022 Options -->
+            <div v-if="inboundForm.protocol === 'shadowsocks'" class="config-box">
+              <div class="box-title">Shadowsocks 加密算法</div>
+              <a-form-item label="加密方法 (Cipher)">
+                <a-select v-model:value="ssForm.method">
+                  <a-select-option value="2022-blake3-aes-128-gcm">2022-blake3-aes-128-gcm (推荐)</a-select-option>
+                  <a-select-option value="2022-blake3-aes-256-gcm">2022-blake3-aes-256-gcm</a-select-option>
+                  <a-select-option value="aes-128-gcm">aes-128-gcm</a-select-option>
+                  <a-select-option value="chacha20-ietf-poly1305">chacha20-ietf-poly1305</a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item label="服务器主密码">
+                <a-input v-model:value="ssForm.password" placeholder="主密码" />
+              </a-form-item>
+            </div>
+          </a-form>
+        </a-tab-pane>
+
+        <!-- Tab 3: 安全与伪装 (Security & Reality/TLS) -->
+        <a-tab-pane key="security" tab="3. TLS / Reality 伪装">
+          <a-form layout="vertical">
+            <!-- Reality Settings Section -->
+            <div v-if="inboundForm.security === 'reality'" class="config-box">
+              <div class="box-title">
+                <span>Reality 偷取证书伪装</span>
+                <a-button size="small" type="link" @click="generateRealityKeys">一键生成 X25519 密钥对</a-button>
+              </div>
+              <a-form-item label="目标回落伪装域名 (SNI)" extra="推荐使用大型合法站点: www.apple.com / addons.mozilla.org / www.cloudflare.com">
+                <a-input v-model:value="realityForm.server_name" placeholder="www.apple.com" />
+              </a-form-item>
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <a-form-item label="私钥 (Private Key)" required>
+                    <a-input v-model:value="realityForm.private_key" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="公钥 (Public Key)" required>
+                    <a-input v-model:value="realityForm.public_key" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <a-form-item label="Short ID (8位 Hex)">
+                    <a-input v-model:value="realityForm.short_id" placeholder="如: 8a2b3c4d" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="SpiderX 爬虫伪装路径">
+                    <a-input v-model:value="realityForm.spider_x" placeholder="/" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </div>
+
+            <!-- Standard TLS Settings -->
+            <div v-if="inboundForm.security === 'tls' || inboundForm.protocol === 'anytls'" class="config-box">
+              <div class="box-title">标准 TLS 证书与 ALPN</div>
+              <a-form-item label="证书域名 (Server Name / SNI)">
+                <a-input v-model:value="tlsForm.server_name" placeholder="yourdomain.com" />
+              </a-form-item>
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <a-form-item label="证书路径 (Cert Path)">
+                    <a-input v-model:value="tlsForm.cert_path" placeholder="/etc/singbox-ui/cert.crt" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="私钥路径 (Key Path)">
+                    <a-input v-model:value="tlsForm.key_path" placeholder="/etc/singbox-ui/private.key" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </div>
+          </a-form>
+        </a-tab-pane>
+
+        <!-- Tab 4: 流量探测 (Sniffing) -->
+        <a-tab-pane key="sniffing" tab="4. 流量探测 (Sniffing)">
+          <a-form layout="vertical">
+            <a-form-item label="启用流量嗅探 (Sniffing)">
+              <a-switch v-model:checked="sniffForm.enabled" />
+            </a-form-item>
+            <div v-if="sniffForm.enabled">
+              <a-form-item label="嗅探目标协议">
+                <a-checkbox-group v-model:value="sniffForm.dest_override">
+                  <a-checkbox value="http">HTTP</a-checkbox>
+                  <a-checkbox value="tls">TLS</a-checkbox>
+                  <a-checkbox value="quic">QUIC</a-checkbox>
+                </a-checkbox-group>
+              </a-form-item>
+              <a-form-item label="嗅探超时时间 (Timeout)">
+                <a-input v-model:value="sniffForm.timeout" placeholder="300ms" />
+              </a-form-item>
+            </div>
+          </a-form>
+        </a-tab-pane>
+      </a-tabs>
     </a-modal>
 
-    <!-- Client Drawer -->
+    <!-- Client Drawer (3x-ui Multi-User Paradigm) -->
     <a-drawer
       v-model:open="clientDrawerVisible"
       :title="`用户管理 - [${currentInbound?.tag}]`"
-      width="820px"
+      width="860px"
     >
       <div class="drawer-header-actions mb-4">
         <a-button type="primary" size="small" @click="openAddClientModal">
@@ -367,6 +482,7 @@
       :title="isEditClient ? '编辑用户' : '添加用户'"
       @ok="handleSaveClient"
       :confirmLoading="modalLoading"
+      width="600px"
     >
       <a-form :model="clientForm" layout="vertical">
         <a-form-item label="用户备注 / Email" required>
@@ -400,6 +516,19 @@
             </a-form-item>
           </a-col>
         </a-row>
+
+        <a-row :gutter="16">
+          <a-col :span="12">
+            <a-form-item label="每月固定重置日 (1-31 号)">
+              <a-input-number v-model:value="clientForm.reset_day" :min="0" :max="31" placeholder="0 为不自动重置" style="width: 100%;" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="最大并发 IP 限制">
+              <a-input-number v-model:value="clientForm.limit_ip" :min="0" placeholder="0 为不限制" style="width: 100%;" />
+            </a-form-item>
+          </a-col>
+        </a-row>
       </a-form>
     </a-modal>
 
@@ -408,7 +537,7 @@
       v-model:open="qrModalVisible"
       title="节点分享与二维码"
       :footer="null"
-      width="400px"
+      width="420px"
     >
       <div class="qr-container">
         <qrcode-vue :value="qrValue" :size="240" level="H" />
@@ -458,6 +587,7 @@ const viewMode = ref<'cards' | 'table'>('cards')
 const inbounds = ref<Inbound[]>([])
 const loading = ref(false)
 const modalLoading = ref(false)
+const modalActiveTab = ref('basic')
 
 // Filters & Selection
 const searchKeyword = ref('')
@@ -509,6 +639,7 @@ const inboundForm = reactive<Partial<Inbound>>({
   security: 'reality',
   settings: '{}',
   stream_settings: '{}',
+  sniffing: '{}',
   enable: true,
   remark: '',
 })
@@ -518,12 +649,37 @@ const realityForm = reactive({
   private_key: '',
   public_key: '',
   short_id: '',
+  spider_x: '/',
+})
+
+const tlsForm = reactive({
+  server_name: '',
+  cert_path: '',
+  key_path: '',
+})
+
+const transportForm = reactive({
+  path: '',
+  host: '',
+  service_name: '',
+})
+
+const sniffForm = reactive({
+  enabled: true,
+  dest_override: ['http', 'tls'],
+  timeout: '300ms',
 })
 
 const hyForm = reactive({
   up_mbps: 0,
   down_mbps: 0,
   obfs_password: '',
+})
+
+const tuicForm = reactive({
+  congestion_control: 'bbr',
+  zero_rtt_handshake: false,
+  heartbeat: '10s',
 })
 
 const ssForm = reactive({
@@ -542,6 +698,8 @@ const clientForm = reactive<Partial<Client>>({
   flow: 'xtls-rprx-vision',
   total: 0,
   expiry_time: 0,
+  reset_day: 0,
+  limit_ip: 0,
   enable: true,
 })
 const clientQuotaGB = ref<number>(0)
@@ -643,10 +801,11 @@ async function fetchInbounds() {
 function getProtocolBg(protocol: string) {
   const map: Record<string, string> = {
     vless: '#3b82f6',
+    anytls: '#10b981',
     hysteria2: '#8b5cf6',
     tuic: '#06b6d4',
     shadowsocks: '#f59e0b',
-    trojan: '#10b981',
+    trojan: '#14b8a6',
     vmess: '#ef4444',
   }
   return map[protocol] || '#64748b'
@@ -655,10 +814,11 @@ function getProtocolBg(protocol: string) {
 function getProtocolColor(protocol: string) {
   const map: Record<string, string> = {
     vless: 'blue',
+    anytls: 'green',
     hysteria2: 'purple',
     tuic: 'cyan',
     shadowsocks: 'orange',
-    trojan: 'green',
+    trojan: 'teal',
     vmess: 'volcano',
   }
   return map[protocol] || 'default'
@@ -713,6 +873,9 @@ async function onProtocolChange(val: string) {
     inboundForm.security = 'reality'
     inboundForm.network = 'tcp'
     await generateRealityKeys()
+  } else if (val === 'anytls') {
+    inboundForm.security = 'tls'
+    inboundForm.network = 'tcp'
   } else if (val === 'hysteria2') {
     inboundForm.security = 'none'
     inboundForm.network = 'udp'
@@ -739,6 +902,7 @@ async function generateRealityKeys() {
 
 function openCreateInboundModal() {
   isEditInbound.value = false
+  modalActiveTab.value = 'basic'
   Object.assign(inboundForm, {
     tag: `inbound-${Math.floor(1000 + Math.random() * 9000)}`,
     protocol: 'vless',
@@ -755,6 +919,7 @@ function openCreateInboundModal() {
 
 function openEditInboundModal(record: Inbound) {
   isEditInbound.value = true
+  modalActiveTab.value = 'basic'
   Object.assign(inboundForm, record)
 
   try {
@@ -764,6 +929,17 @@ function openEditInboundModal(record: Inbound) {
       realityForm.private_key = stream.reality.private_key || ''
       realityForm.public_key = stream.reality.public_key || ''
       realityForm.short_id = stream.reality.short_ids?.[0] || ''
+      realityForm.spider_x = stream.reality.spider_x || '/'
+    }
+    if (stream.tls) {
+      tlsForm.server_name = stream.tls.server_name || ''
+      tlsForm.cert_path = stream.tls.cert_path || ''
+      tlsForm.key_path = stream.tls.key_path || ''
+    }
+    if (stream.transport) {
+      transportForm.path = stream.transport.path || ''
+      transportForm.host = stream.transport.host || ''
+      transportForm.service_name = stream.transport.service_name || ''
     }
   } catch {}
 
@@ -773,10 +949,20 @@ function openEditInboundModal(record: Inbound) {
       hyForm.up_mbps = settings.up_mbps || 0
       hyForm.down_mbps = settings.down_mbps || 0
       hyForm.obfs_password = settings.obfs_password || ''
+    } else if (record.protocol === 'tuic') {
+      tuicForm.congestion_control = settings.congestion_control || 'bbr'
+      tuicForm.zero_rtt_handshake = !!settings.zero_rtt_handshake
     } else if (record.protocol === 'shadowsocks') {
       ssForm.method = settings.method || '2022-blake3-aes-128-gcm'
       ssForm.password = settings.password || ''
     }
+  } catch {}
+
+  try {
+    const sn = JSON.parse(record.sniffing || '{}')
+    sniffForm.enabled = !!sn.enabled
+    sniffForm.dest_override = sn.dest_override || ['http', 'tls']
+    sniffForm.timeout = sn.timeout || '300ms'
   } catch {}
 
   inboundModalVisible.value = true
@@ -788,13 +974,28 @@ async function handleSaveInbound() {
     const streamSettingsObj: any = {
       network: inboundForm.network,
       security: inboundForm.security,
+      transport: {
+        type: inboundForm.network,
+        path: transportForm.path,
+        host: transportForm.host,
+        service_name: transportForm.service_name,
+      },
     }
+
     if (inboundForm.security === 'reality') {
       streamSettingsObj.reality = {
+        dest: realityForm.server_name + ':443',
         server_names: [realityForm.server_name],
         private_key: realityForm.private_key,
         public_key: realityForm.public_key,
         short_ids: [realityForm.short_id],
+        spider_x: realityForm.spider_x,
+      }
+    } else if (inboundForm.security === 'tls' || inboundForm.protocol === 'anytls') {
+      streamSettingsObj.tls = {
+        server_name: tlsForm.server_name,
+        cert_path: tlsForm.cert_path,
+        key_path: tlsForm.key_path,
       }
     }
 
@@ -805,6 +1006,11 @@ async function handleSaveInbound() {
         down_mbps: hyForm.down_mbps,
         obfs_type: hyForm.obfs_password ? 'salamander' : '',
         obfs_password: hyForm.obfs_password,
+      }
+    } else if (inboundForm.protocol === 'tuic') {
+      settingsObj = {
+        congestion_control: tuicForm.congestion_control,
+        zero_rtt_handshake: tuicForm.zero_rtt_handshake,
       }
     } else if (inboundForm.protocol === 'shadowsocks') {
       settingsObj = {
@@ -817,6 +1023,7 @@ async function handleSaveInbound() {
       ...inboundForm,
       stream_settings: JSON.stringify(streamSettingsObj),
       settings: JSON.stringify(settingsObj),
+      sniffing: JSON.stringify(sniffForm),
     }
 
     if (isEditInbound.value && inboundForm.id) {
@@ -866,6 +1073,8 @@ async function openAddClientModal() {
     email: `user-${Math.floor(100 + Math.random() * 900)}`,
     uuid: res.uuid,
     flow: currentInbound.value?.security === 'reality' ? 'xtls-rprx-vision' : '',
+    reset_day: 0,
+    limit_ip: 0,
     enable: true,
   })
   clientQuotaGB.value = 0
@@ -994,13 +1203,6 @@ onMounted(() => {
   margin: 4px 0 0 0;
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .toolbar-card {
   border-radius: 12px;
   background: #ffffff;
@@ -1069,15 +1271,15 @@ onMounted(() => {
 }
 
 .protocol-icon {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 10px;
   display: flex;
   justify-content: center;
   align-items: center;
   color: #ffffff;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .node-info {
@@ -1209,21 +1411,21 @@ onMounted(() => {
   color: #64748b;
 }
 
-.config-section {
+.config-box {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: 14px;
+  margin-top: 12px;
 }
 
-.section-title {
+.box-title {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-weight: 600;
   color: #334155;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .qr-container {
