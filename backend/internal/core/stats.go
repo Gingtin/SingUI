@@ -150,10 +150,12 @@ func (sm *StatsManager) checkLimitsAndQuotas() {
 
 		var rules []models.RoutingRule
 		database.DB.Order("`order` asc, id asc").Find(&rules)
+		var outbounds []models.Outbound
+		database.DB.Find(&outbounds)
 		var dns models.DNSSettings
 		database.DB.First(&dns)
 
-		cfg, err := GenerateConfig(inbounds, rules, dns, portSetting.Value, secretSetting.Value)
+		cfg, err := GenerateConfig(inbounds, outbounds, rules, dns, portSetting.Value, secretSetting.Value)
 		if err == nil {
 			_ = WriteConfigToFile(cfg, configPath)
 			if Instance != nil && Instance.GetStatus().IsRunning {

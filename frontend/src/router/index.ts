@@ -3,10 +3,12 @@ import MainLayout from '@/layouts/MainLayout.vue'
 import Login from '@/views/Login.vue'
 import Dashboard from '@/views/Dashboard.vue'
 import Inbounds from '@/views/Inbounds.vue'
+import Outbounds from '@/views/Outbounds.vue'
 import Routing from '@/views/Routing.vue'
 import Subscriptions from '@/views/Subscriptions.vue'
 import Logs from '@/views/Logs.vue'
 import Settings from '@/views/Settings.vue'
+import ApiDocs from '@/views/ApiDocs.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -31,6 +33,11 @@ const routes: RouteRecordRaw[] = [
         component: Inbounds,
       },
       {
+        path: 'outbounds',
+        name: 'Outbounds',
+        component: Outbounds,
+      },
+      {
         path: 'routing',
         name: 'Routing',
         component: Routing,
@@ -49,6 +56,11 @@ const routes: RouteRecordRaw[] = [
         path: 'settings',
         name: 'Settings',
         component: Settings,
+      },
+      {
+        path: 'docs',
+        name: 'ApiDocs',
+        component: ApiDocs,
       },
     ],
   },

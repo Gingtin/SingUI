@@ -30,11 +30,11 @@ type DNSConfig struct {
 }
 
 type DNSServer struct {
-	Tag          string `json:"tag"`
-	Address      string `json:"address"`
-	Detour       string `json:"detour,omitempty"`
+	Tag             string `json:"tag"`
+	Address         string `json:"address"`
+	Detour          string `json:"detour,omitempty"`
 	AddressResolver string `json:"address_resolver,omitempty"`
-	Strategy     string `json:"strategy,omitempty"`
+	Strategy        string `json:"strategy,omitempty"`
 }
 
 type DNSRule struct {
@@ -45,9 +45,19 @@ type DNSRule struct {
 }
 
 type RouteConfig struct {
+	RuleSet             []RuleSetItem             `json:"rule_set,omitempty"`
 	Rules               []map[string]interface{} `json:"rules"`
 	AutoDetectInterface bool                     `json:"auto_detect_interface"`
 	Final               string                   `json:"final"`
+}
+
+type RuleSetItem struct {
+	Tag            string `json:"tag"`
+	Type           string `json:"type"` // remote, local
+	Format         string `json:"format"` // binary, source
+	URL            string `json:"url,omitempty"`
+	Path           string `json:"path,omitempty"`
+	DownloadDetour string `json:"download_detour,omitempty"`
 }
 
 type ExperimentalConfig struct {
@@ -79,14 +89,14 @@ type StatsConfig struct {
 }
 
 // GenerateConfig assembles the complete Sing-box configuration
-func GenerateConfig(inbounds []models.Inbound, rules []models.RoutingRule, dns models.DNSSettings, clashPort, clashSecret string) (*SingboxConfig, error) {
+func GenerateConfig(inbounds []models.Inbound, outbounds []models.Outbound, rules []models.RoutingRule, dns models.DNSSettings, clashPort, clashSecret string) (*SingboxConfig, error) {
 	// DNS Servers setup
 	dnsServers := []DNSServer{
 		{Tag: "local-dns", Address: dns.LocalDNS, Detour: "direct"},
-		{Tag: "remote-dns", Address: dns.RemoteDNS, Detour: "direct"},
+		{Tag: "remote-dns", Address: dns.RemoteDNS, Detour: "direct", AddressResolver: "local-dns"},
 	}
 	if dns.ChinaDNS != "" {
-		dnsServers = append(dnsServers, DNSServer{Tag: "china-dns", Address: dns.ChinaDNS, Detour: "direct"})
+		dnsServers = append(dnsServers, DNSServer{Tag: "china-dns", Address: dns.ChinaDNS, Detour: "direct", AddressResolver: "local-dns"})
 	}
 
 	strategy := dns.Strategy
@@ -106,12 +116,8 @@ func GenerateConfig(inbounds []models.Inbound, rules []models.RoutingRule, dns m
 				{Geosite: []string{"cn"}, Server: "china-dns"},
 			},
 		},
-		Inbounds: make([]interface{}, 0),
-		Outbounds: []interface{}{
-			map[string]interface{}{"type": "direct", "tag": "direct"},
-			map[string]interface{}{"type": "block", "tag": "block"},
-			map[string]interface{}{"type": "dns", "tag": "dns-out"},
-		},
+		Inbounds:  make([]interface{}, 0),
+		Outbounds: make([]interface{}, 0),
 		Route: RouteConfig{
 			AutoDetectInterface: true,
 			Final:               "direct",
@@ -135,7 +141,43 @@ func GenerateConfig(inbounds []models.Inbound, rules []models.RoutingRule, dns m
 		},
 	}
 
-	// 1. Process Inbounds
+	// 1. Process Outbounds
+	if len(outbounds) == 0 {
+		cfg.Outbounds = []interface{}{
+			map[string]interface{}{"type": "direct", "tag": "direct"},
+			map[string]interface{}{"type": "block", "tag": "block"},
+			map[string]interface{}{"type": "dns", "tag": "dns-out"},
+		}
+	} else {
+		for _, o := range outbounds {
+			if !o.Enable {
+				continue
+			}
+			outObj := map[string]interface{}{
+				"type": o.Type,
+				"tag":  o.Tag,
+			}
+			if o.Server != "" {
+				outObj["server"] = o.Server
+			}
+			if o.Port > 0 {
+				outObj["server_port"] = o.Port
+			}
+
+			// Parse extra settings if any
+			if o.Settings != "" {
+				var extra map[string]interface{}
+				if err := json.Unmarshal([]byte(o.Settings), &extra); err == nil {
+					for k, v := range extra {
+						outObj[k] = v
+					}
+				}
+			}
+			cfg.Outbounds = append(cfg.Outbounds, outObj)
+		}
+	}
+
+	// 2. Process Inbounds
 	for _, in := range inbounds {
 		if !in.Enable {
 			continue
@@ -146,9 +188,25 @@ func GenerateConfig(inbounds []models.Inbound, rules []models.RoutingRule, dns m
 			"tag":         in.Tag,
 			"listen":      in.Listen,
 			"listen_port": in.Port,
+			"sniff":       true,
+			"sniff_timeout": "300ms",
 		}
 
 		switch in.Protocol {
+		case "anytls":
+			users := make([]map[string]interface{}, 0)
+			for _, c := range in.Clients {
+				if !c.Enable {
+					continue
+				}
+				users = append(users, map[string]interface{}{
+					"name":     c.Email,
+					"password": c.Password,
+				})
+			}
+			inboundMap["users"] = users
+			parseStreamSettings(in, inboundMap)
+
 		case "vless":
 			users := make([]map[string]interface{}, 0)
 			for _, c := range in.Clients {
@@ -241,6 +299,7 @@ func GenerateConfig(inbounds []models.Inbound, rules []models.RoutingRule, dns m
 					"password": hySettings.ObfsPass,
 				}
 			}
+			inboundMap["ignore_client_bandwidth"] = false
 			parseStreamSettings(in, inboundMap)
 
 		case "tuic":
@@ -263,7 +322,7 @@ func GenerateConfig(inbounds []models.Inbound, rules []models.RoutingRule, dns m
 		cfg.Inbounds = append(cfg.Inbounds, inboundMap)
 	}
 
-	// 2. Process Route Rules
+	// 3. Process Route Rules & Rule-Sets
 	for _, r := range rules {
 		if !r.Enable {
 			continue
@@ -336,15 +395,15 @@ func parseStreamSettings(in models.Inbound, inboundMap map[string]interface{}) {
 	if in.Security == "reality" || stream.Security == "reality" {
 		if stream.Reality != nil && len(stream.Reality.ServerNames) > 0 {
 			realityMap := map[string]interface{}{
-				"enabled":   true,
-				"handshake": map[string]interface{}{"server": stream.Reality.ServerNames[0], "server_port": 443},
-				"private_key": stream.Reality.PrivateKey,
-				"short_id":    stream.Reality.ShortIds,
+				"enabled":             true,
+				"handshake":           map[string]interface{}{"server": stream.Reality.ServerNames[0], "server_port": 443},
+				"private_key":         stream.Reality.PrivateKey,
+				"short_id":            stream.Reality.ShortIds,
 				"max_time_difference": "1m",
 			}
 			inboundMap["tls"] = realityMap
 		}
-	} else if in.Security == "tls" || stream.Security == "tls" {
+	} else if in.Security == "tls" || stream.Security == "tls" || in.Protocol == "anytls" {
 		if stream.TLS != nil {
 			tlsMap := map[string]interface{}{
 				"enabled":     true,

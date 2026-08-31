@@ -20,7 +20,9 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+	// Enable WAL mode and 5s busy timeout for high concurrency
+	dsn := dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Warn),
 	})
 	if err != nil {
@@ -31,6 +33,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		&models.User{},
 		&models.Inbound{},
 		&models.Client{},
+		&models.Outbound{},
 		&models.Setting{},
 		&models.RoutingRule{},
 		&models.DNSSettings{},
@@ -54,7 +57,7 @@ func seedDefaultData(db *gorm.DB) {
 		}
 		_ = admin.SetPassword("admin")
 		db.Create(&admin)
-		log.Println("[DB] Initialized default admin user (admin/admin). Please change password in settings!")
+		log.Println("[DB] Initialized default admin user (admin/admin).")
 	}
 
 	// Seed Settings
@@ -85,6 +88,20 @@ func seedDefaultData(db *gorm.DB) {
 				Key:   k,
 				Value: v,
 			})
+		}
+	}
+
+	// Seed Default Outbounds
+	var outboundCount int64
+	db.Model(&models.Outbound{}).Count(&outboundCount)
+	if outboundCount == 0 {
+		defaultOutbounds := []models.Outbound{
+			{Tag: "direct", Type: "direct", Enable: true, Remark: "直接出站 (无需代理)"},
+			{Tag: "block", Type: "block", Enable: true, Remark: "拦截丢弃 (广告/恶意站点)"},
+			{Tag: "dns-out", Type: "dns", Enable: true, Remark: "DNS 专属出站分流"},
+		}
+		for _, o := range defaultOutbounds {
+			db.Create(&o)
 		}
 	}
 

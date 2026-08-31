@@ -1,8 +1,8 @@
 <template>
   <a-layout class="main-layout">
-    <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible class="sider">
+    <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible class="sider" width="220">
       <div class="logo">
-        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="12 2 2 7 12 12 22 7 12 2" />
           <polyline points="2 17 12 22 22 17" />
           <polyline points="2 12 12 17 22 12" />
@@ -18,9 +18,13 @@
           <template #icon><GlobalOutlined /></template>
           <span>入站节点</span>
         </a-menu-item>
+        <a-menu-item key="/outbounds">
+          <template #icon><SendOutlined /></template>
+          <span>出站链路</span>
+        </a-menu-item>
         <a-menu-item key="/routing">
           <template #icon><ForkOutlined /></template>
-          <span>分流路由与DNS</span>
+          <span>规则路由与DNS</span>
         </a-menu-item>
         <a-menu-item key="/subscriptions">
           <template #icon><ShareAltOutlined /></template>
@@ -28,11 +32,15 @@
         </a-menu-item>
         <a-menu-item key="/logs">
           <template #icon><CodeOutlined /></template>
-          <span>日志与诊断</span>
+          <span>核心配置与日志</span>
         </a-menu-item>
         <a-menu-item key="/settings">
           <template #icon><SettingOutlined /></template>
           <span>面板设置</span>
+        </a-menu-item>
+        <a-menu-item key="/docs">
+          <template #icon><FileTextOutlined /></template>
+          <span>API 接口文档</span>
         </a-menu-item>
       </a-menu>
     </a-layout-sider>
@@ -74,10 +82,12 @@ import { useRouter, useRoute } from 'vue-router'
 import {
   DashboardOutlined,
   GlobalOutlined,
+  SendOutlined,
   ForkOutlined,
   ShareAltOutlined,
   CodeOutlined,
   SettingOutlined,
+  FileTextOutlined,
   MenuUnfoldOutlined,
   MenuFoldOutlined,
   UserOutlined,
@@ -119,14 +129,14 @@ function handleLogout() {
 }
 
 .logo {
-  height: 64px;
+  height: 56px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 20px;
+  gap: 10px;
+  padding: 0 18px;
   color: #38bdf8;
   font-weight: 700;
-  font-size: 18px;
+  font-size: 17px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -137,16 +147,18 @@ function handleLogout() {
 
 .header {
   background: #ffffff;
-  padding: 0 24px;
+  padding: 0 20px;
+  height: 56px;
+  line-height: 56px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   z-index: 10;
 }
 
 .trigger {
-  font-size: 18px;
+  font-size: 16px;
   cursor: pointer;
   transition: color 0.3s;
 }
@@ -159,7 +171,7 @@ function handleLogout() {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 4px 8px;
   border-radius: 6px;
   transition: background 0.2s;
@@ -170,7 +182,7 @@ function handleLogout() {
 }
 
 .content {
-  margin: 20px 24px;
+  margin: 16px 20px;
   min-height: 280px;
 }
 </style>

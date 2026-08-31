@@ -44,6 +44,7 @@ func SetupRouter(webDistFS fs.FS) *gin.Engine {
 				server.POST("/core/restart", handlers.RestartCore)
 				server.GET("/logs", handlers.GetLogs)
 				server.GET("/logs/ws", handlers.StreamLogsWS)
+				server.GET("/config", handlers.GetRawConfig)
 				server.GET("/connections", handlers.GetActiveConnections)
 			}
 
@@ -68,6 +69,15 @@ func SetupRouter(webDistFS fs.FS) *gin.Engine {
 				inbounds.POST("/reset-all", handlers.ResetAllTraffic)
 				inbounds.GET("/reality-keypair", handlers.GenerateRealityKeypair)
 				inbounds.GET("/random-uuid", handlers.GenerateRandomUUID)
+			}
+
+			// Outbounds & Detours
+			outbounds := protected.Group("/outbounds")
+			{
+				outbounds.GET("", handlers.ListOutbounds)
+				outbounds.POST("", handlers.CreateOutbound)
+				outbounds.PUT("/:id", handlers.UpdateOutbound)
+				outbounds.DELETE("/:id", handlers.DeleteOutbound)
 			}
 
 			// Routing & DNS
@@ -104,16 +114,14 @@ func SetupRouter(webDistFS fs.FS) *gin.Engine {
 				return
 			}
 
-			// Check if file exists in embed FS
 			if _, err := fs.Stat(webDistFS, strings.TrimPrefix(path, "/")); err == nil && path != "/" {
 				fileServer.ServeHTTP(c.Writer, c.Request)
 				return
 			}
 
-			// SPA Fallback: serve index.html
 			indexFile, err := webDistFS.Open("index.html")
 			if err != nil {
-				c.String(http.StatusOK, "SingUI Server is running. (Frontend dist not found)")
+				c.String(http.StatusOK, "SingUI Server is running.")
 				return
 			}
 			defer indexFile.Close()

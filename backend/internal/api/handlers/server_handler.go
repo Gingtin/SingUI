@@ -124,6 +124,22 @@ func StreamLogsWS(c *gin.Context) {
 	}
 }
 
+func GetRawConfig(c *gin.Context) {
+	var cfgSetting models.Setting
+	database.DB.Where("key = ?", "singbox_config_path").First(&cfgSetting)
+	cfgPath := cfgSetting.Value
+	if cfgPath == "" {
+		cfgPath = "config/singbox_config.json"
+	}
+
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"config": "{}"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"config": string(data)})
+}
+
 func GetActiveConnections(c *gin.Context) {
 	if core.StatsInstance == nil {
 		c.JSON(http.StatusOK, gin.H{"connections": []interface{}{}, "uploadTotal": 0, "downloadTotal": 0})
