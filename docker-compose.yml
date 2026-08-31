@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  singbox-ui:
+    image: singbox-ui:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: singbox-ui
+    restart: unless-stopped
+    network_mode: "host"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - TZ=Asia/Shanghai

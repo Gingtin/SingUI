@@ -1,0 +1,15 @@
+[Unit]
+Description=Sing-box UI Management Panel
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/usr/local/singbox-ui
+ExecStart=/usr/local/singbox-ui/singbox-ui -d /usr/local/singbox-ui/data/singbox_ui.db -p 2096
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

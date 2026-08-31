@@ -1,0 +1,32 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+singbox-ui
+
+# Data and SQLite
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Singbox configs and cache
+config/singbox_config.json
+cache.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+backend/cmd/server/dist/assets/
+backend/cmd/server/dist/*.js
+backend/cmd/server/dist/*.css
+
+# Logs and IDE
+*.log
+.vscode/
+.idea/
+.DS_Store
