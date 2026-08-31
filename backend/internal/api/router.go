@@ -101,6 +101,14 @@ func SetupRouter(webDistFS fs.FS) *gin.Engine {
 				settings.GET("/backup", handlers.DownloadBackup)
 				settings.POST("/restore", handlers.RestoreBackup)
 			}
+
+			// Version & OTA Updates
+			version := protected.Group("/version")
+			{
+				version.GET("/check", handlers.VersionHdl.CheckVersions)
+				version.POST("/update-core", handlers.VersionHdl.UpdateCore)
+				version.POST("/update-geo", handlers.VersionHdl.UpdateGeo)
+			}
 		}
 	}
 
