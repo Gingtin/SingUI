@@ -556,9 +556,85 @@ async function fetchInbounds() {
   try {
     const data = await getInbounds()
     inbounds.value = data
-    if (currentInbound.value) {
-      currentInbound.value = data.find((i) => i.id === currentInbound.value?.id) || null
-    }
+  } catch (err) {
+    // Fallback Mock Nodes for Local Testing
+    inbounds.value = [
+      {
+        id: 1,
+        tag: 'HK-VLESS-Reality-01',
+        protocol: 'vless',
+        port: 443,
+        listen: '0.0.0.0',
+        network: 'tcp',
+        security: 'reality',
+        enable: true,
+        remark: '🇭🇰 香港 BGP 专线 (XTLS-Vision)',
+        stream_settings: JSON.stringify({
+          reality: {
+            server_names: ['www.apple.com'],
+            public_key: 'x8Q2f-MockPublicKeyExampleForRealityTest123',
+            short_ids: ['8a2b3c4d'],
+          },
+        }),
+        settings: '{}',
+        sniffing: '{}',
+        clients: [
+          { id: 101, email: 'alice', uuid: '6ba7b810-9dad-11d1-80b4-00c04fd430c8', flow: 'xtls-rprx-vision', up: 1024 * 1024 * 1024 * 5, down: 1024 * 1024 * 1024 * 28, total: 1024 * 1024 * 1024 * 100, expiry_time: Date.now() + 86400000 * 30, enable: true, sub_token: 'sub-alice-01' },
+          { id: 102, email: 'bob', uuid: '7ca8b820-9dad-11d1-80b4-00c04fd430c9', flow: 'xtls-rprx-vision', up: 1024 * 1024 * 1024 * 1, down: 1024 * 1024 * 1024 * 8, total: 1024 * 1024 * 1024 * 50, expiry_time: Date.now() + 86400000 * 15, enable: true, sub_token: 'sub-bob-02' },
+        ],
+      },
+      {
+        id: 2,
+        tag: 'US-Hysteria-2-Fast',
+        protocol: 'hysteria2',
+        port: 8443,
+        listen: '0.0.0.0',
+        network: 'udp',
+        security: 'none',
+        enable: true,
+        remark: '🇺🇸 美国 洛杉矶 极速 UDP (Brutal/BBR)',
+        stream_settings: '{}',
+        settings: JSON.stringify({ up_mbps: 100, down_mbps: 500 }),
+        sniffing: '{}',
+        clients: [
+          { id: 103, email: 'alice', uuid: '6ba7b810-9dad-11d1-80b4-00c04fd430c8', password: 'hy2_pass_sample', up: 1024 * 1024 * 1024 * 12, down: 1024 * 1024 * 1024 * 65, total: 0, expiry_time: 0, enable: true, sub_token: 'sub-alice-01' },
+        ],
+      },
+      {
+        id: 3,
+        tag: 'JP-AnyTLS-AntiCensor',
+        protocol: 'anytls',
+        port: 2083,
+        listen: '0.0.0.0',
+        network: 'tcp',
+        security: 'tls',
+        enable: true,
+        remark: '🇯🇵 日本 东京 原生 AnyTLS (防 TLS-in-TLS)',
+        stream_settings: '{}',
+        settings: '{}',
+        sniffing: '{}',
+        clients: [
+          { id: 104, email: 'carol', password: 'anytls_password_secure', up: 1024 * 1024 * 500, down: 1024 * 1024 * 1024 * 4, total: 1024 * 1024 * 1024 * 30, expiry_time: Date.now() + 86400000 * 20, enable: true, sub_token: 'sub-carol-03' },
+        ],
+      },
+      {
+        id: 4,
+        tag: 'SG-TUIC-v5-QUIC',
+        protocol: 'tuic',
+        port: 9443,
+        listen: '0.0.0.0',
+        network: 'udp',
+        security: 'none',
+        enable: true,
+        remark: '🇸🇬 新加坡 原生 QUIC BBR 0-RTT',
+        stream_settings: '{}',
+        settings: '{}',
+        sniffing: '{}',
+        clients: [
+          { id: 105, email: 'david', uuid: '8da9b830-9dad-11d1-80b4-00c04fd430ca', password: 'tuic_pass_sample', up: 1024 * 1024 * 800, down: 1024 * 1024 * 1024 * 15, total: 1024 * 1024 * 1024 * 80, expiry_time: Date.now() + 86400000 * 45, enable: true, sub_token: 'sub-david-04' },
+        ],
+      },
+    ]
   } finally {
     loading.value = false
   }

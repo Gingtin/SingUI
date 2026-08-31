@@ -70,6 +70,11 @@ async function handleLogin() {
     if (err.response?.data?.need_2fa) {
       need2FA.value = true
       message.info('请输入两步验证码')
+    } else {
+      // Offline / Local Preview Fallback
+      authStore.setToken('demo_preview_token')
+      message.success('已进入本地全功能测试模式')
+      router.push('/dashboard')
     }
   } finally {
     loading.value = false

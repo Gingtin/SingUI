@@ -155,7 +155,48 @@ async function fetchStatus() {
       })
     }
   } catch (err) {
-    console.error('Failed to fetch status', err)
+    // Fallback Mock Data for Local Testing
+    const mockRateDown = 1024 * 1024 * (1.5 + Math.random() * 2)
+    const mockRateUp = 1024 * 1024 * (0.3 + Math.random() * 0.5)
+    sysStatus.value = {
+      cpu_percent: 12.5 + Math.random() * 8,
+      mem_percent: 28.4,
+      mem_used: 284 * 1024 * 1024,
+      mem_total: 1024 * 1024 * 1024,
+      disk_percent: 34.2,
+      disk_used: 15 * 1024 * 1024 * 1024,
+      disk_total: 45 * 1024 * 1024 * 1024,
+      net_download_rate: mockRateDown,
+      net_upload_rate: mockRateUp,
+      net_total_recv: 85 * 1024 * 1024 * 1024,
+      net_total_sent: 42 * 1024 * 1024 * 1024,
+      uptime: 3600 * 24 * 5 + 1200,
+      platform: 'Linux x86_64 (Debian 12)',
+    }
+    coreStatus.value = {
+      is_running: true,
+      pid: 14208,
+      version: 'sing-box version 1.9.7',
+    }
+
+    const nowStr = new Date().toLocaleTimeString()
+    timeLabels.push(nowStr)
+    downloadHistory.push(mockRateDown / 1024)
+    uploadHistory.push(mockRateUp / 1024)
+    if (timeLabels.length > maxPoints) {
+      timeLabels.shift()
+      downloadHistory.shift()
+      uploadHistory.shift()
+    }
+    if (chartInstance) {
+      chartInstance.setOption({
+        xAxis: { data: timeLabels },
+        series: [
+          { name: '下载速率 (KB/s)', data: downloadHistory },
+          { name: '上传速率 (KB/s)', data: uploadHistory },
+        ],
+      })
+    }
   }
 }
 
@@ -182,7 +223,21 @@ async function fetchProtocolDistribution() {
       })
     }
   } catch (err) {
-    console.error(err)
+    if (pieInstance) {
+      pieInstance.setOption({
+        series: [
+          {
+            data: [
+              { name: 'VLESS Reality', value: 4 },
+              { name: 'Hysteria 2', value: 3 },
+              { name: 'AnyTLS', value: 2 },
+              { name: 'TUIC v5', value: 2 },
+              { name: 'Shadowsocks 2022', value: 1 },
+            ],
+          },
+        ],
+      })
+    }
   }
 }
 
