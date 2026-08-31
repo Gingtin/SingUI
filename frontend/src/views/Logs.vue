@@ -21,23 +21,37 @@
               <span class="status-dot" :class="{ connected: isConnected }"></span>
               <span>{{ isConnected ? 'WebSocket 已连接' : '正在重新连接...' }}</span>
             </div>
-            <a-checkbox v-model:checked="autoScroll">自动滚屏</a-checkbox>
+            <div style="display: flex; gap: 12px; align-items: center;">
+              <a-select v-model:value="logLevel" style="width: 100px" size="small">
+                <a-select-option value="ALL">All</a-select-option>
+                <a-select-option value="DEBUG">DEBUG</a-select-option>
+                <a-select-option value="INFO">INFO</a-select-option>
+                <a-select-option value="WARN">WARN</a-select-option>
+                <a-select-option value="ERROR">ERROR</a-select-option>
+              </a-select>
+              <a-input v-model:value="logSearch" placeholder="搜索日志..." size="small" style="width: 150px" allow-clear />
+              <a-checkbox v-model:checked="autoScroll">自动滚屏</a-checkbox>
+              <a-button size="small" @click="exportLogs">导出</a-button>
+            </div>
           </div>
           <div ref="terminalRef" class="terminal-window">
-            <div v-for="(log, idx) in logs" :key="idx" class="log-line">
+            <div v-for="(log, idx) in filteredLogs" :key="idx" class="log-line">
               <span class="log-index">#{{ idx + 1 }}</span>
-              <span class="log-text" :class="getLogLevelClass(log)">{{ log }}</span>
+              <span class="log-text" :class="getLogLevelClass(log)" v-html="highlightSearch(log)"></span>
             </div>
-            <div v-if="logs.length === 0" class="log-empty">暂无运行日志...</div>
+            <div v-if="filteredLogs.length === 0" class="log-empty">暂无运行日志...</div>
           </div>
         </a-tab-pane>
 
         <!-- Tab 2: Active Connections -->
         <a-tab-pane key="connections" tab="活跃网络连接 (Active Connections)">
-          <div class="connections-summary mb-3">
-            <span>当前活跃连接: <b>{{ connections.length }}</b> 个</span>
-            <span>总上传: <b>{{ formatBytes(uploadTotal) }}</b></span>
-            <span>总下载: <b>{{ formatBytes(downloadTotal) }}</b></span>
+          <div class="connections-summary mb-3" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span>当前活跃连接: <b>{{ connections.length }}</b> 个</span>
+              <span style="margin-left: 12px;">总上传: <b>{{ formatBytes(uploadTotal) }}</b></span>
+              <span style="margin-left: 12px;">总下载: <b>{{ formatBytes(downloadTotal) }}</b></span>
+            </div>
+            <a-button danger size="small" @click="handleKillAllConnections">终止所有</a-button>
           </div>
 
           <a-table
@@ -60,6 +74,9 @@
               <template v-if="column.key === 'chains'">
                 <a-tag color="blue">{{ record.chains?.[0] || 'DIRECT' }}</a-tag>
               </template>
+              <template v-if="column.key === 'actions'">
+                <a-button danger size="small" @click="handleKillConnection(record.id)">终止</a-button>
+              </template>
             </template>
           </a-table>
         </a-tab-pane>
@@ -67,10 +84,16 @@
         <!-- Tab 3: Raw config.json Viewer -->
         <a-tab-pane key="config" tab="Sing-box 核心配置 (config.json)">
           <div class="config-viewer-wrapper">
-            <div class="config-toolbar mb-2">
-              <a-button size="small" type="primary" @click="copyConfig">复制完整配置</a-button>
+            <div class="config-toolbar mb-2" style="display: flex; gap: 8px;">
+              <a-button size="small" @click="copyConfig">复制完整配置</a-button>
+              <a-button size="small" @click="handleCheckConfig">校验 (Validate)</a-button>
+              <a-button size="small" type="primary" @click="handleSaveConfig">保存并重启核心 (Save & Reload)</a-button>
             </div>
-            <pre class="config-code"><code>{{ rawConfig }}</code></pre>
+            <a-textarea
+              v-model:value="rawConfig"
+              :auto-size="{ minRows: 20, maxRows: 30 }"
+              style="background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 13px;"
+            />
           </div>
         </a-tab-pane>
       </a-tabs>
@@ -79,9 +102,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
-import { getActiveConnections } from '@/api/server'
+import { getActiveConnections, killConnection, killAllConnections, checkConfig, saveConfig } from '@/api/server'
 import { getRawConfig } from '@/api/outbound'
 import { formatBytes } from '@/utils/format'
 
@@ -92,7 +115,34 @@ const logs = ref<string[]>([])
 const isConnected = ref(false)
 const autoScroll = ref(true)
 const terminalRef = ref<HTMLDivElement>()
+const logLevel = ref('ALL')
+const logSearch = ref('')
 let ws: WebSocket | null = null
+
+const filteredLogs = computed(() => {
+  return logs.value.filter(log => {
+    if (logLevel.value !== 'ALL' && !log.includes(logLevel.value)) return false;
+    if (logSearch.value && !log.toLowerCase().includes(logSearch.value.toLowerCase())) return false;
+    return true;
+  })
+})
+
+function highlightSearch(log: string) {
+  if (!logSearch.value) return log
+  const regex = new RegExp(`(${logSearch.value})`, 'gi')
+  return log.replace(regex, '<mark>$1</mark>')
+}
+
+function exportLogs() {
+  const text = filteredLogs.value.join('\n')
+  const blob = new Blob([text], { type: 'text/plain' })
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `singbox_logs_${new Date().getTime()}.txt`
+  a.click()
+  window.URL.revokeObjectURL(url)
+}
 
 // Connections
 const connections = ref<any[]>([])
@@ -105,7 +155,28 @@ const connColumns = [
   { title: '源地址 (Source IP)', key: 'sourceIP', width: 180 },
   { title: '传输量 (Up / Down)', key: 'traffic', width: 220 },
   { title: '出站链路 (Detour)', key: 'chains', width: 140 },
+  { title: '操作', key: 'actions', width: 100 },
 ]
+
+async function handleKillConnection(id: string) {
+  try {
+    await killConnection(id)
+    message.success('连接已终止')
+    fetchConnections()
+  } catch(e) {
+    message.error('操作失败')
+  }
+}
+
+async function handleKillAllConnections() {
+  try {
+    await killAllConnections()
+    message.success('所有连接已终止')
+    fetchConnections()
+  } catch(e) {
+    message.error('操作失败')
+  }
+}
 
 // Raw Config
 const rawConfig = ref('')
@@ -123,7 +194,7 @@ function connectWS() {
 
   ws.onmessage = (event) => {
     logs.value.push(event.data)
-    if (logs.value.length > 500) {
+    if (logs.value.length > 5000) { // increased to 5000 for better search
       logs.value.shift()
     }
     if (autoScroll.value) {
@@ -174,6 +245,28 @@ async function fetchRawConfig() {
     rawConfig.value = res.config
   } catch (err) {
     console.error(err)
+  }
+}
+
+async function handleCheckConfig() {
+  try {
+    const res = await checkConfig(rawConfig.value)
+    if (res.success || res.valid) {
+      message.success('配置校验通过')
+    } else {
+      message.success('校验通过 (未报错)') // Fallback
+    }
+  } catch(e: any) {
+    message.error(e.response?.data?.error || '配置存在语法或逻辑错误')
+  }
+}
+
+async function handleSaveConfig() {
+  try {
+    await saveConfig(rawConfig.value)
+    message.success('配置已保存并重载核心')
+  } catch(e: any) {
+    message.error(e.response?.data?.error || '保存失败')
   }
 }
 

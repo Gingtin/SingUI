@@ -109,6 +109,25 @@
                   </a-form-item>
                 </a-col>
               </a-row>
+
+              <a-divider>FakeIP 伪装配置</a-divider>
+              <a-row :gutter="24">
+                <a-col :xs="24" :md="8">
+                  <a-form-item label="开启 FakeIP (enable_fakeip)">
+                    <a-switch v-model:checked="dnsForm.enable_fakeip" />
+                  </a-form-item>
+                </a-col>
+                <a-col :xs="24" :md="8">
+                  <a-form-item label="FakeIP IPv4 (fakeip_inet4)">
+                    <a-input v-model:value="dnsForm.fakeip_inet4" placeholder="198.18.0.0/15" />
+                  </a-form-item>
+                </a-col>
+                <a-col :xs="24" :md="8">
+                  <a-form-item label="FakeIP IPv6 (fakeip_inet6)">
+                    <a-input v-model:value="dnsForm.fakeip_inet6" placeholder="fc00::/18" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
             </a-form>
           </div>
         </a-tab-pane>
@@ -133,9 +152,7 @@
           <a-col :span="10">
             <a-form-item label="执行动作 (Outbound)" required>
               <a-select v-model:value="ruleForm.outbound">
-                <a-select-option value="direct">DIRECT (直连)</a-select-option>
-                <a-select-option value="block">BLOCK (拦截)</a-select-option>
-                <a-select-option value="dns-out">DNS-OUT (DNS路由)</a-select-option>
+                <a-select-option v-for="ob in outboundOptions" :key="ob" :value="ob">{{ ob.toUpperCase() }}</a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -145,26 +162,56 @@
           <a-input v-model:value="ruleDomainInput" placeholder="geosite:cn" />
         </a-form-item>
 
-        <a-form-item label="匹配 IP / GeoIP (多项以逗号分隔)" extra="例如: geoip:cn, geoip:private, 192.168.0.0/16">
+        <a-form-item label="匹配目标 IP / GeoIP (多项以逗号分隔)" extra="例如: geoip:cn, geoip:private, 192.168.0.0/16">
           <a-input v-model:value="ruleIPInput" placeholder="geoip:cn" />
         </a-form-item>
 
         <a-row :gutter="16">
-          <a-col :span="12">
-            <a-form-item label="匹配协议">
+          <a-col :span="8">
+            <a-form-item label="匹配协议 (Protocol)">
               <a-input v-model:value="ruleForm.protocol" placeholder="如: dns, http, tls" />
             </a-form-item>
           </a-col>
+          <a-col :span="8">
+            <a-form-item label="网络类型 (Network)">
+              <a-select v-model:value="ruleForm.network" allow-clear>
+                <a-select-option value="tcp">TCP</a-select-option>
+                <a-select-option value="udp">UDP</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="8">
+            <a-form-item label="端口范围 (Port Range)">
+              <a-input v-model:value="ruleForm.port_range" placeholder="如: 80,443" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+
+        <a-row :gutter="16">
+          <a-col :span="12">
+            <a-form-item label="源 IP 网段 (Source IP CIDR)">
+              <a-input v-model:value="ruleForm.source_ip_cidr" placeholder="如: 192.168.1.0/24" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="进程名 (Process Name)">
+              <a-input v-model:value="ruleForm.process_name" placeholder="如: chrome.exe" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+
+        <a-row :gutter="16">
           <a-col :span="12">
             <a-form-item label="规则优先级 (序号越小越优先)">
               <a-input-number v-model:value="ruleForm.order" :min="1" style="width: 100%;" />
             </a-form-item>
           </a-col>
+          <a-col :span="12">
+            <a-form-item label="备注说明">
+              <a-input v-model:value="ruleForm.remark" placeholder="备注用途" />
+            </a-form-item>
+          </a-col>
         </a-row>
-
-        <a-form-item label="备注说明">
-          <a-input v-model:value="ruleForm.remark" placeholder="备注用途" />
-        </a-form-item>
       </a-form>
     </a-modal>
   </div>
@@ -184,6 +231,7 @@ import {
   RoutingRule,
   DNSSettings,
 } from '@/api/routing'
+import { getOutbounds } from '@/api/outbound'
 
 const activeTab = ref('rules')
 
@@ -193,11 +241,16 @@ const rulesLoading = ref(false)
 const ruleModalVisible = ref(false)
 const isEditRule = ref(false)
 const ruleModalLoading = ref(false)
+const outboundOptions = ref<string[]>(['direct', 'block', 'dns-out'])
 
 const ruleForm = reactive<Partial<RoutingRule>>({
   tag: '',
   outbound: 'direct',
   protocol: '',
+  network: '',
+  port_range: '',
+  source_ip_cidr: '',
+  process_name: '',
   order: 1,
   remark: '',
   enable: true,
@@ -220,6 +273,8 @@ const dnsForm = reactive<DNSSettings>({
   remote_dns: 'https://1.1.1.1/dns-query',
   china_dns: 'https://223.5.5.5/dns-query',
   enable_fakeip: false,
+  fakeip_inet4: '198.18.0.0/15',
+  fakeip_inet6: 'fc00::/18',
   strategy: 'prefer_ipv4',
 })
 const dnsSaving = ref(false)
@@ -229,6 +284,16 @@ function getOutboundColor(outbound: string) {
   if (outbound === 'block') return 'red'
   if (outbound === 'dns-out') return 'purple'
   return 'blue'
+}
+
+async function fetchOutboundsList() {
+  try {
+    const res = await getOutbounds()
+    const custom = res.map(o => o.tag)
+    outboundOptions.value = ['direct', 'block', 'dns-out', ...custom]
+  } catch (err) {
+    outboundOptions.value = ['direct', 'block', 'dns-out', 'proxy']
+  }
 }
 
 async function fetchRules() {
@@ -261,10 +326,15 @@ async function fetchDNS() {
 
 function openCreateRuleModal() {
   isEditRule.value = false
+  fetchOutboundsList()
   Object.assign(ruleForm, {
     tag: `rule-${rules.value.length + 1}`,
     outbound: 'direct',
     protocol: '',
+    network: '',
+    port_range: '',
+    source_ip_cidr: '',
+    process_name: '',
     order: rules.value.length + 1,
     remark: '',
     enable: true,
@@ -276,6 +346,7 @@ function openCreateRuleModal() {
 
 function openEditRuleModal(rule: RoutingRule) {
   isEditRule.value = true
+  fetchOutboundsList()
   Object.assign(ruleForm, rule)
   try {
     const d = JSON.parse(rule.domain || '[]')

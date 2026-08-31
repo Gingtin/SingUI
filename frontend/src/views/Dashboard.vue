@@ -10,8 +10,13 @@
           </div>
           <div class="status-details">
             <span v-if="coreStatus.pid"><b>PID:</b> {{ coreStatus.pid }}</span>
+            <span v-if="coreStatus.memory_used"><b>进程内存 (RSS):</b> {{ formatBytes(coreStatus.memory_used) }}</span>
             <span><b>运行时间:</b> {{ formatDuration(sysStatus.uptime) }}</span>
+            <span v-if="sysStatus.public_ip"><b>公网IP:</b> {{ sysStatus.public_ip }}</span>
             <span><b>系统平台:</b> {{ sysStatus.platform || sysStatus.os }}</span>
+            <span v-if="sysStatus.kernel"><b>内核:</b> {{ sysStatus.kernel }}</span>
+            <span v-if="sysStatus.arch"><b>架构:</b> {{ sysStatus.arch }}</span>
+            <span v-if="sysStatus.load_avg"><b>负载:</b> {{ sysStatus.load_avg.join(', ') }}</span>
             <span v-if="coreStatus.version"><b>版本:</b> {{ coreStatus.version.split('\n')[0] }}</span>
           </div>
         </div>
@@ -66,6 +71,17 @@
       <a-col :xs="24" :sm="12" :md="6">
         <a-card class="metric-card" :bordered="false">
           <div class="metric-header">
+            <span class="title">活动连接数</span>
+            <span class="value">{{ activeConnections }}</span>
+          </div>
+          <a-progress :percent="100" :show-info="false" stroke-color="#8b5cf6" />
+          <div class="metric-sub">当前建立的实时连接</div>
+        </a-card>
+      </a-col>
+
+      <a-col :xs="24" :sm="12" :md="6">
+        <a-card class="metric-card" :bordered="false">
+          <div class="metric-header">
             <span class="title">实时网速</span>
             <span class="speed-indicator">
               <span>⬇️ {{ formatBytes(sysStatus.net_download_rate) }}/s</span>
@@ -73,6 +89,15 @@
             </span>
           </div>
           <div class="metric-sub mt-2">总流量: ⬇️ {{ formatBytes(sysStatus.net_total_recv) }} | ⬆️ {{ formatBytes(sysStatus.net_total_sent) }}</div>
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <!-- Top 10 Users Row -->
+    <a-row :gutter="[16, 16]" class="mt-4">
+      <a-col :span="24">
+        <a-card class="table-card" title="Top 10 用户流量消耗" :bordered="false">
+          <a-table :dataSource="topUsers" :columns="userColumns" :pagination="false" rowKey="id" size="middle" />
         </a-card>
       </a-col>
     </a-row>
@@ -97,16 +122,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, onMounted, onUnmounted, h } from 'vue'
+import { message, Tag } from 'ant-design-vue'
 import * as echarts from 'echarts'
-import { getSystemStatus, getCoreStatus, startCore, stopCore, restartCore, SystemStatus, CoreStatus } from '@/api/server'
+import { getSystemStatus, getCoreStatus, startCore, stopCore, restartCore, SystemStatus, CoreStatus, getActiveConnections } from '@/api/server'
 import { getInbounds } from '@/api/inbound'
 import { formatBytes, formatDuration } from '@/utils/format'
 
 const sysStatus = ref<Partial<SystemStatus>>({})
 const coreStatus = ref<Partial<CoreStatus>>({})
 const coreLoading = ref(false)
+
+const activeConnections = ref(0)
+const topUsers = ref<any[]>([])
+
+const userColumns = [
+  { title: 'Email (用户)', dataIndex: 'email', key: 'email' },
+  { title: '所属入站', dataIndex: 'inbound', key: 'inbound' },
+  { title: '上传', dataIndex: 'up', key: 'up', customRender: ({ text }: any) => formatBytes(text) },
+  { title: '下载', dataIndex: 'down', key: 'down', customRender: ({ text }: any) => formatBytes(text) },
+  { title: '总消耗', dataIndex: 'total_usage', key: 'total_usage', customRender: ({ text }: any) => formatBytes(text) },
+  { title: '状态', dataIndex: 'enable', key: 'enable', customRender: ({ text }: any) => h(Tag, { color: text ? 'success' : 'error' }, () => text ? '启用' : '禁用') }
+]
 
 const chartRef = ref<HTMLDivElement>()
 const pieChartRef = ref<HTMLDivElement>()
@@ -129,9 +166,10 @@ function getProgressColor(percent: number | undefined) {
 
 async function fetchStatus() {
   try {
-    const [sys, core] = await Promise.all([getSystemStatus(), getCoreStatus()])
+    const [sys, core, conns] = await Promise.all([getSystemStatus(), getCoreStatus(), getActiveConnections()])
     sysStatus.value = sys
     coreStatus.value = core
+    activeConnections.value = conns?.connections?.length || 0
 
     // Update Chart
     const nowStr = new Date().toLocaleTimeString()
@@ -172,12 +210,18 @@ async function fetchStatus() {
       net_total_sent: 42 * 1024 * 1024 * 1024,
       uptime: 3600 * 24 * 5 + 1200,
       platform: 'Linux x86_64 (Debian 12)',
+      public_ip: '203.0.113.45',
+      kernel: '6.1.0-18-amd64',
+      arch: 'amd64',
+      load_avg: [0.15, 0.12, 0.09]
     }
     coreStatus.value = {
       is_running: true,
       pid: 14208,
       version: 'sing-box version 1.9.7',
+      memory_used: 18 * 1024 * 1024,
     }
+    activeConnections.value = Math.floor(Math.random() * 100) + 20
 
     const nowStr = new Date().toLocaleTimeString()
     timeLabels.push(nowStr)
@@ -200,13 +244,28 @@ async function fetchStatus() {
   }
 }
 
-async function fetchProtocolDistribution() {
+async function fetchExtraData() {
   try {
     const inbounds = await getInbounds()
     const counts: Record<string, number> = {}
+    const clientsData: any[] = []
+
     for (const inb of inbounds) {
       counts[inb.protocol] = (counts[inb.protocol] || 0) + 1
+      if (inb.clients) {
+        for (const c of inb.clients) {
+          clientsData.push({
+            ...c,
+            inbound: inb.tag,
+            up: c.up || 0,
+            down: c.down || 0,
+            total_usage: (c.up || 0) + (c.down || 0)
+          })
+        }
+      }
     }
+    
+    topUsers.value = clientsData.sort((a, b) => b.total_usage - a.total_usage).slice(0, 10)
 
     const pieData = Object.keys(counts).map((k) => ({
       name: k.toUpperCase(),
@@ -238,6 +297,10 @@ async function fetchProtocolDistribution() {
         ],
       })
     }
+    topUsers.value = [
+      { id: 1, email: 'demo_user_1@test.com', inbound: 'VLESS-Reality', up: 1024*1024*500, down: 1024*1024*1024*2.5, total_usage: 1024*1024*1024*3, enable: true },
+      { id: 2, email: 'demo_user_2@test.com', inbound: 'Hysteria2-Main', up: 1024*1024*200, down: 1024*1024*1024*1.2, total_usage: 1024*1024*1024*1.4, enable: true }
+    ]
   }
 }
 
@@ -343,7 +406,7 @@ function initCharts() {
 onMounted(() => {
   initCharts()
   fetchStatus()
-  fetchProtocolDistribution()
+  fetchExtraData()
   pollTimer = setInterval(fetchStatus, 2000)
   window.addEventListener('resize', () => {
     chartInstance?.resize()

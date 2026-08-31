@@ -202,10 +202,13 @@ func (sb *SubBuilder) BuildClashMeta() (string, error) {
 				if len(stream.Reality.ServerNames) > 0 {
 					p["servername"] = stream.Reality.ServerNames[0]
 				}
-				p["reality-opts"] = map[string]interface{}{
+				realityOpts := map[string]interface{}{
 					"public-key": stream.Reality.PublicKey,
-					"short-id":   stream.Reality.ShortIds[0],
 				}
+				if len(stream.Reality.ShortIds) > 0 {
+					realityOpts["short-id"] = stream.Reality.ShortIds[0]
+				}
+				p["reality-opts"] = realityOpts
 				p["client-fingerprint"] = "chrome"
 			}
 			proxies = append(proxies, p)

@@ -15,6 +15,10 @@ export interface SystemStatus {
   uptime: number
   os: string
   platform: string
+  public_ip?: string
+  kernel?: string
+  arch?: string
+  load_avg?: number[]
 }
 
 export interface CoreStatus {
@@ -23,6 +27,7 @@ export interface CoreStatus {
   start_time: string
   last_error: string
   version: string
+  memory_used?: number
 }
 
 export const getSystemStatus = () => request.get<any, SystemStatus>('/server/status')
@@ -32,3 +37,7 @@ export const stopCore = () => request.post<any, any>('/server/core/stop')
 export const restartCore = () => request.post<any, any>('/server/core/restart')
 export const getLogs = () => request.get<any, string[]>('/server/logs')
 export const getActiveConnections = () => request.get<any, any>('/server/connections')
+export const killConnection = (id: string) => request.delete<any, any>(`/server/connections/${id}`)
+export const killAllConnections = () => request.delete<any, any>('/server/connections')
+export const checkConfig = (config: string) => request.post<any, any>('/server/config/check', { config })
+export const saveConfig = (config: string) => request.post<any, any>('/server/config', { config })

@@ -44,7 +44,25 @@
                   </a-form-item>
                 </a-col>
               </a-row>
-              <a-button type="dashed" @click="handleChangePassword">确认修改密码</a-button>
+              <a-divider>两步验证 (2FA) 保护</a-divider>
+              <a-row :gutter="24">
+                <a-col :xs="24" :md="12">
+                  <a-form-item label="启用 TOTP 两步验证">
+                    <a-switch v-model:checked="twoFaEnabled" @change="handle2FAToggle" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+
+              <div v-if="show2FASetup" style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+                <p>请使用 Google Authenticator 或其他支持 TOTP 的应用扫描以下二维码：</p>
+                <img v-if="twoFaQrCode" :src="twoFaQrCode" alt="2FA QR Code" style="width: 150px; height: 150px; margin-bottom: 16px;" />
+                <p style="font-family: monospace; font-size: 14px; margin-bottom: 16px;">密钥: <b>{{ twoFaSecret }}</b></p>
+                <a-form-item label="验证码" extra="输入应用上显示的 6 位动态验证码">
+                  <a-input v-model:value="twoFaCode" placeholder="123456" style="width: 200px;" />
+                </a-form-item>
+                <a-button type="primary" :loading="confirming2FA" @click="confirm2FASetup">验证并启用 2FA</a-button>
+                <a-button style="margin-left: 8px;" @click="cancel2FASetup">取消设置</a-button>
+              </div>
             </a-form>
           </div>
         </a-tab-pane>
@@ -258,7 +276,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { getSettings, updateSettings, updatePassword, downloadBackup, restoreBackup } from '@/api/setting'
+import { getSettings, updateSettings, updatePassword, downloadBackup, restoreBackup, generate2FA, enable2FA, disable2FA } from '@/api/setting'
 import { checkVersions, updateCore, updateGeo, VersionInfo } from '@/api/version'
 
 const activeTab = ref('web')
@@ -286,6 +304,13 @@ const pwdForm = reactive({
   old_password: '',
   new_password: '',
 })
+
+const twoFaEnabled = ref(false)
+const show2FASetup = ref(false)
+const twoFaQrCode = ref('')
+const twoFaSecret = ref('')
+const twoFaCode = ref('')
+const confirming2FA = ref(false)
 
 // Version & Updates State
 const checkingVersions = ref(false)
@@ -319,6 +344,7 @@ async function fetchSettings() {
     tgQuotaNotify.value = settings.tg_notify_on_quota === 'true'
     tgExpireNotify.value = settings.tg_notify_on_expire === 'true'
     tgAutoBackup.value = settings.auto_backup_enabled === 'true'
+    twoFaEnabled.value = settings.two_fa_enabled === 'true'
   } catch (err) {
     console.error(err)
   }
@@ -400,6 +426,55 @@ async function handleChangePassword() {
   } catch (err: any) {
     message.error(err.response?.data?.error || '密码修改失败')
   }
+}
+
+async function handle2FAToggle(checked: boolean) {
+  if (checked) {
+    try {
+      const res = await generate2FA()
+      twoFaSecret.value = res.secret
+      twoFaQrCode.value = res.qr_code_url
+      show2FASetup.value = true
+      twoFaEnabled.value = false // Not enabled until confirmed
+    } catch (err) {
+      message.error('无法生成 2FA 密钥')
+      twoFaEnabled.value = false
+    }
+  } else {
+    try {
+      await disable2FA()
+      message.success('2FA 已禁用')
+      twoFaEnabled.value = false
+      show2FASetup.value = false
+    } catch (err) {
+      message.error('禁用 2FA 失败')
+      twoFaEnabled.value = true
+    }
+  }
+}
+
+async function confirm2FASetup() {
+  if (!twoFaCode.value) {
+    message.warning('请输入 6 位验证码')
+    return
+  }
+  confirming2FA.value = true
+  try {
+    await enable2FA(twoFaCode.value)
+    message.success('2FA 已成功启用！')
+    show2FASetup.value = false
+    twoFaEnabled.value = true
+  } catch (err) {
+    message.error('验证码错误或过期，请重试')
+  } finally {
+    confirming2FA.value = false
+  }
+}
+
+function cancel2FASetup() {
+  show2FASetup.value = false
+  twoFaEnabled.value = false
+  twoFaCode.value = ''
 }
 
 async function handleDownloadBackup() {

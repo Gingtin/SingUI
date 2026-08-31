@@ -86,7 +86,7 @@ func main() {
 	db.Where("key = ?", "clash_api_port").First(&clashPortSetting)
 	db.Where("key = ?", "clash_api_secret").First(&clashSecretSetting)
 
-	core.InitStatsEngine(clashPortSetting.Value, clashSecretSetting.Value)
+	core.InitStatsManager(clashPortSetting.Value, clashSecretSetting.Value)
 
 	// 4. Start Background Cronjobs
 	cronManager := cronjob.StartCronJobs()

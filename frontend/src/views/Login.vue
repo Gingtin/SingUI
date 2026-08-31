@@ -71,10 +71,14 @@ async function handleLogin() {
       need2FA.value = true
       message.info('请输入两步验证码')
     } else {
-      // Offline / Local Preview Fallback
-      authStore.setToken('demo_preview_token')
-      message.success('已进入本地全功能测试模式')
-      router.push('/dashboard')
+      if ((import.meta as any).env?.DEV) {
+        // Offline / Local Preview Fallback
+        authStore.setToken('demo_preview_token')
+        message.success('已进入本地全功能测试模式')
+        router.push('/dashboard')
+      } else {
+        message.error(err.response?.data?.message || '登录失败，请检查用户名和密码')
+      }
     }
   } finally {
     loading.value = false

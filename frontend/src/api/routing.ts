@@ -10,6 +10,9 @@ export interface RoutingRule {
   protocol?: string
   port?: string
   network?: string
+  port_range?: string
+  source_ip_cidr?: string
+  process_name?: string
   rule_set?: string
   enable: boolean
   order: number

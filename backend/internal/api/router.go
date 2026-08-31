@@ -32,7 +32,7 @@ func SetupRouter(webDistFS fs.FS) *gin.Engine {
 
 		// Protected Routes
 		protected := api.Group("")
-		protected.Use(middleware.JWTAuth())
+		protected.Use(middleware.JWTAuth(), middleware.RequireAdmin())
 		{
 			// Server & Core
 			server := protected.Group("/server")

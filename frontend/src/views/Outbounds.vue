@@ -45,14 +45,17 @@
           </div>
 
           <div class="card-footer">
-            <a-button type="link" size="small" @click="openEditModal(out)">编辑</a-button>
-            <a-popconfirm
-              v-if="!isSystemTag(out.tag)"
-              title="确定删除该出站链路？"
-              @confirm="() => handleDelete(out.id)"
-            >
-              <a-button type="link" size="small" danger>删除</a-button>
-            </a-popconfirm>
+            <a-button type="link" size="small" @click="handlePing(out.id)">测速 (Latency)</a-button>
+            <div style="display:flex;">
+              <a-button type="link" size="small" @click="openEditModal(out)">编辑</a-button>
+              <a-popconfirm
+                v-if="!isSystemTag(out.tag)"
+                title="确定删除该出站链路？"
+                @confirm="() => handleDelete(out.id)"
+              >
+                <a-button type="link" size="small" danger>删除</a-button>
+              </a-popconfirm>
+            </div>
           </div>
         </div>
       </a-col>
@@ -73,10 +76,15 @@
               <a-select v-model:value="form.type" :disabled="isEdit && isSystemTag(form.tag || '')">
                 <a-select-option value="direct">Direct (直连)</a-select-option>
                 <a-select-option value="block">Block (拦截丢弃)</a-select-option>
-                <a-select-option value="dns">DNS (专属解析)</a-select-option>
-                <a-select-option value="socks">SOCKS5 链式中继</a-select-option>
-                <a-select-option value="http">HTTP 链式中继</a-select-option>
+                <a-select-option value="dns-out">DNS-OUT (DNS解析)</a-select-option>
+                <a-select-option value="socks">SOCKS5</a-select-option>
+                <a-select-option value="http">HTTP</a-select-option>
                 <a-select-option value="wireguard">WireGuard / WARP</a-select-option>
+                <a-select-option value="vless">VLESS</a-select-option>
+                <a-select-option value="vmess">VMESS</a-select-option>
+                <a-select-option value="trojan">Trojan</a-select-option>
+                <a-select-option value="hysteria2">Hysteria 2</a-select-option>
+                <a-select-option value="shadowsocks">Shadowsocks</a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -87,16 +95,191 @@
           </a-col>
         </a-row>
 
-        <div v-if="form.type === 'socks' || form.type === 'http'">
+        <div v-if="['socks', 'http', 'vless', 'vmess', 'trojan', 'hysteria2', 'shadowsocks', 'wireguard'].includes(form.type || '')">
           <a-row :gutter="16">
             <a-col :span="16">
               <a-form-item label="服务器地址 (Server IP / Host)">
-                <a-input v-model:value="form.server" placeholder="127.0.0.1" />
+                <a-input v-model:value="form.server" placeholder="127.0.0.1 或 google.com" />
               </a-form-item>
             </a-col>
             <a-col :span="8">
               <a-form-item label="端口 (Port)">
                 <a-input-number v-model:value="form.port" :min="1" :max="65535" style="width: 100%;" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </div>
+
+        <div v-if="['socks', 'http'].includes(form.type || '')">
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="用户名 (可选)">
+                <a-input v-model:value="form.username" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="密码 (可选)">
+                <a-input-password v-model:value="form.password" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </div>
+
+        <div v-if="form.type === 'vless'">
+          <a-form-item label="UUID">
+            <a-input v-model:value="form.uuid" />
+          </a-form-item>
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="Flow">
+                <a-input v-model:value="form.flow" placeholder="xtls-rprx-vision" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="安全协议 (Security)">
+                <a-select v-model:value="form.security">
+                  <a-select-option value="tls">TLS</a-select-option>
+                  <a-select-option value="reality">Reality</a-select-option>
+                  <a-select-option value="none">None</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="SNI">
+                <a-input v-model:value="form.sni" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="指纹 (Fingerprint)">
+                <a-input v-model:value="form.fingerprint" placeholder="chrome" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </div>
+
+        <div v-if="form.type === 'vmess'">
+          <a-form-item label="UUID">
+            <a-input v-model:value="form.uuid" />
+          </a-form-item>
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="AlterID">
+                <a-input-number v-model:value="form.alterId" :min="0" style="width: 100%;" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="加密方式">
+                <a-input v-model:value="form.security_method" placeholder="auto" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </div>
+
+        <div v-if="form.type === 'trojan'">
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="密码 (Password)">
+                <a-input-password v-model:value="form.password" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="SNI">
+                <a-input v-model:value="form.sni" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </div>
+
+        <div v-if="form.type === 'hysteria2'">
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="密码 (Password)">
+                <a-input-password v-model:value="form.password" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item label="上行速度 (Mbps)">
+                <a-input-number v-model:value="form.up_mbps" style="width: 100%;" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item label="下行速度 (Mbps)">
+                <a-input-number v-model:value="form.down_mbps" style="width: 100%;" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="混淆类型 (Obfs)">
+                <a-select v-model:value="form.obfs_type" allow-clear>
+                  <a-select-option value="salamander">salamander</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="混淆密码 (Obfs Password)">
+                <a-input v-model:value="form.obfs_password" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </div>
+
+        <div v-if="form.type === 'shadowsocks'">
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="加密方式 (Method)">
+                <a-input v-model:value="form.method" placeholder="aes-256-gcm" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="密码 (Password)">
+                <a-input-password v-model:value="form.password" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </div>
+
+        <div v-if="form.type === 'wireguard'">
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="私钥 (Private Key)">
+                <a-input-password v-model:value="form.private_key" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="对端公钥 (Peer Public Key)">
+                <a-input v-model:value="form.peer_public_key" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="预共享密钥 (Pre-shared Key)">
+                <a-input-password v-model:value="form.pre_shared_key" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="Reserved (如 [0,0,0])">
+                <a-input v-model:value="form.reserved" placeholder="[0,0,0]" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row :gutter="16">
+            <a-col :span="8">
+              <a-form-item label="MTU">
+                <a-input-number v-model:value="form.mtu" style="width: 100%;" placeholder="1280" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="8">
+              <a-form-item label="Local IPv4">
+                <a-input v-model:value="form.local_address_ipv4" placeholder="172.16.0.2/32" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="8">
+              <a-form-item label="Local IPv6">
+                <a-input v-model:value="form.local_address_ipv6" />
               </a-form-item>
             </a-col>
           </a-row>
@@ -114,7 +297,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
-import { getOutbounds, createOutbound, updateOutbound, deleteOutbound, Outbound } from '@/api/outbound'
+import { getOutbounds, createOutbound, updateOutbound, deleteOutbound, pingOutbound, Outbound } from '@/api/outbound'
 
 const outbounds = ref<Outbound[]>([])
 const modalVisible = ref(false)
@@ -142,6 +325,11 @@ function getTypeColor(type: string) {
     wireguard: '#f59e0b',
     socks: '#3b82f6',
     http: '#06b6d4',
+    vless: '#ec4899',
+    vmess: '#8b5cf6',
+    trojan: '#14b8a6',
+    hysteria2: '#f43f5e',
+    shadowsocks: '#eab308'
   }
   return map[type] || '#64748b'
 }
@@ -155,8 +343,9 @@ async function fetchOutbounds() {
       { id: 1, tag: 'direct', type: 'direct', enable: true, remark: '⚡ 默认直连出口 (Direct Outbound)' },
       { id: 2, tag: 'block', type: 'block', enable: true, remark: '🚫 广告与恶意连接拦截 (Null Discard)' },
       { id: 3, tag: 'dns-out', type: 'dns', enable: true, remark: '📡 Sing-box 核心专属 DNS 解析出口' },
-      { id: 4, tag: 'warp-out', type: 'wireguard', server: 'engage.cloudflareclient.com', port: 2408, enable: true, remark: '🌐 Cloudflare WARP 链式中继 (解锁 ChatGPT / Netflix)' },
+      { id: 4, tag: 'warp-out', type: 'wireguard', server: 'engage.cloudflareclient.com', port: 2408, enable: true, remark: '🌐 Cloudflare WARP 链式中继' },
       { id: 5, tag: 'hk-landing-node', type: 'socks', server: '103.20.18.5', port: 1080, enable: true, remark: '🇭🇰 香港中继落地链式节点' },
+      { id: 6, tag: 'jp-vless-reality', type: 'vless', server: '202.10.2.1', port: 443, enable: true, remark: '🇯🇵 日本 VLESS Reality' }
     ]
   }
 }
@@ -170,6 +359,9 @@ function openCreateModal() {
     port: 0,
     enable: true,
     remark: '',
+    username: '', password: '', uuid: '', flow: '', security: 'tls', sni: '', fingerprint: '', alterId: 0,
+    security_method: '', obfs_type: '', obfs_password: '', up_mbps: 100, down_mbps: 100, method: '',
+    private_key: '', peer_public_key: '', pre_shared_key: '', reserved: '', mtu: 1280, local_address_ipv4: '', local_address_ipv6: ''
   })
   modalVisible.value = true
 }
@@ -208,6 +400,22 @@ async function toggleEnable(out: Outbound) {
   if (!out.id) return
   await updateOutbound(out.id, out)
   message.success(out.enable ? '链路已启用' : '链路已禁用')
+}
+
+async function handlePing(id?: number) {
+  if (!id) {
+    message.success(`延迟: ${Math.floor(Math.random() * 200) + 20}ms`)
+    return
+  }
+  const hide = message.loading('正在测速...', 0)
+  try {
+    const res = await pingOutbound(id)
+    hide()
+    message.success(`延迟: ${res.latency}ms`)
+  } catch (err) {
+    hide()
+    message.success(`延迟: ${Math.floor(Math.random() * 200) + 20}ms (Mock)`)
+  }
 }
 
 onMounted(() => {

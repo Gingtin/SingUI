@@ -14,8 +14,9 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
 	"github.com/singbox-ui/singbox-ui/internal/core"
+	"github.com/singbox-ui/singbox-ui/internal/database"
+	"github.com/singbox-ui/singbox-ui/internal/database/models"
 )
 
 type VersionInfo struct {
@@ -220,6 +221,43 @@ func UpdateSingboxCore(targetVersion string) error {
 // UpdateGeoDatabases downloads latest GeoIP and Geosite SRS databases
 func UpdateGeoDatabases() error {
 	log.Println("[Updater] Updating GeoIP & Geosite databases...")
-	// Can download latest SRS rule-sets or MMDB
+	var binPathSetting models.Setting
+	database.DB.Where("key = ?", "singbox_bin_path").First(&binPathSetting)
+	binPath := binPathSetting.Value
+	targetDir := "/usr/local/share/sing-box/"
+	if binPath != "" {
+		targetDir = filepath.Dir(binPath)
+	}
+
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %v", targetDir, err)
+	}
+
+	downloadFile := func(url, dest string) error {
+		resp, err := http.Get(url)
+		if err != nil || resp.StatusCode != 200 {
+			return fmt.Errorf("failed to download %s: %v", url, err)
+		}
+		defer resp.Body.Close()
+
+		out, err := os.Create(dest)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+
+		_, err = io.Copy(out, resp.Body)
+		return err
+	}
+
+	if err := downloadFile("https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip.db", filepath.Join(targetDir, "geoip.db")); err != nil {
+		return err
+	}
+
+	if err := downloadFile("https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db", filepath.Join(targetDir, "geosite.db")); err != nil {
+		return err
+	}
+
+	log.Println("[Updater] GeoIP & Geosite databases updated successfully.")
 	return nil
 }

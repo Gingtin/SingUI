@@ -64,7 +64,7 @@
       <div v-if="!collapsed" class="sider-footer">
         <div class="footer-chip">
           <span class="status-dot"></span>
-          <span>Sing-box 1.9.7 (WAL)</span>
+          <span>{{ coreVersion ? coreVersion.split('\n')[0] : 'Sing-box 未知版本' }}</span>
         </div>
       </div>
     </a-layout-sider>
@@ -86,13 +86,13 @@
           <!-- Live RAM Indicator -->
           <div class="system-chip memory">
             <ThunderboltOutlined class="chip-icon" />
-            <span>内存常驻: <b>18.4 MB</b></span>
+            <span>内存常驻: <b>{{ formatBytes(memUsed) }}</b></span>
           </div>
 
           <!-- Core Status Pill -->
           <div class="system-chip core">
-            <span class="pulse-dot"></span>
-            <span>Sing-box: <b>运行中</b></span>
+            <span class="pulse-dot" :class="{ stopped: !coreRunning }"></span>
+            <span>Sing-box: <b>{{ coreRunning ? '运行中' : '已停止' }}</b></span>
           </div>
 
           <!-- User Profile Dropdown -->
@@ -127,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   DashboardOutlined,
@@ -138,13 +138,14 @@ import {
   CodeOutlined,
   SettingOutlined,
   FileTextOutlined,
-  UserOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { getSystemStatus, getCoreStatus } from '@/api/server'
+import { formatBytes } from '@/utils/format'
 
 const router = useRouter()
 const route = useRoute()
@@ -152,6 +153,32 @@ const authStore = useAuthStore()
 
 const collapsed = ref(false)
 const selectedKeys = ref<string[]>([route.path])
+
+const memUsed = ref(0)
+const coreRunning = ref(false)
+const coreVersion = ref('')
+let pollTimer: any = null
+
+async function fetchHeaderStatus() {
+  try {
+    const sys = await getSystemStatus()
+    memUsed.value = sys.mem_used || 0
+  } catch(e) {}
+  try {
+    const core = await getCoreStatus()
+    coreRunning.value = core.is_running || false
+    coreVersion.value = core.version || ''
+  } catch(e) {}
+}
+
+onMounted(() => {
+  fetchHeaderStatus()
+  pollTimer = setInterval(fetchHeaderStatus, 5000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+})
 
 watch(
   () => route.path,

@@ -84,13 +84,38 @@ func RestoreBackup(c *gin.Context) {
 		return
 	}
 
-	// Copy temp to active db
+	// Validate SQLite magic bytes
 	src, err := os.Open(tempPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	defer src.Close()
+
+	magic := make([]byte, 16)
+	if _, err := src.Read(magic); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read uploaded file"})
+		return
+	}
+	if string(magic) != "SQLite format 3\000" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid SQLite database file"})
+		return
+	}
+	src.Seek(0, 0) // reset offset
+
+	// Backup existing DB before overwriting
+	if _, err := os.Stat(dbPath); err == nil {
+		backupPath := dbPath + ".bak"
+		srcDB, err := os.Open(dbPath)
+		if err == nil {
+			defer srcDB.Close()
+			dstDB, err := os.Create(backupPath)
+			if err == nil {
+				defer dstDB.Close()
+				io.Copy(dstDB, srcDB)
+			}
+		}
+	}
 
 	dst, err := os.OpenFile(dbPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
